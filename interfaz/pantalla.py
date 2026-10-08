@@ -6,18 +6,23 @@ import curses
 import time
 
 from motores import MOTORES, CuadradoMedio
+from juego.config import VIDAS_INICIALES, METAS_NIVEL
 from juego.partida import Partida
 from juego.piezas import FORMAS, ORDEN
 
 FILAS_MIN, COLUMNAS_MIN = 24, 64
 TICK_MS = 30
+DURACION_AVISO = 1.5     # segundos que se muestra "¡Nivel 2!" o "Perdiste una vida"
+ANCHO_BARRA = 20
 
 COLORES = {
     "I": curses.COLOR_CYAN, "O": curses.COLOR_YELLOW, "T": curses.COLOR_MAGENTA,
     "S": curses.COLOR_GREEN, "Z": curses.COLOR_RED, "J": curses.COLOR_BLUE,
     "L": curses.COLOR_WHITE,
 }
-PAR_FANTASMA = 20
+PAR_FANTASMA, PAR_LIMITE, PAR_VIDA = 20, 21, 22
+PAR_BARRA_INICIO = 30    # pares 30.. para el degradado de la barra
+pares_barra = []
 
 
 def iniciar_colores():
@@ -26,6 +31,18 @@ def iniciar_colores():
     for i, tipo in enumerate(ORDEN, start=1):
         curses.init_pair(i, curses.COLOR_BLACK, COLORES[tipo])
     curses.init_pair(PAR_FANTASMA, curses.COLOR_WHITE, -1)
+    curses.init_pair(PAR_LIMITE, curses.COLOR_BLUE, -1)
+    curses.init_pair(PAR_VIDA, curses.COLOR_RED, -1)
+
+    # Degradado azul -> rojo. Con 256 colores se usa el cubo 6x6x6 de xterm:
+    # índice = 16 + 36·rojo + 6·verde + azul, con cada componente de 0 a 5.
+    if curses.COLORS >= 256:
+        tonos = [16 + 36 * r + (5 - r) for r in range(6)]   # 21 (azul) ... 196 (rojo)
+    else:
+        tonos = [curses.COLOR_BLUE, curses.COLOR_MAGENTA, curses.COLOR_RED]
+    for i, tono in enumerate(tonos):
+        curses.init_pair(PAR_BARRA_INICIO + i, tono, -1)
+        pares_barra.append(curses.color_pair(PAR_BARRA_INICIO + i))
 
 
 def par(tipo):
@@ -46,6 +63,7 @@ def escribir(win, y, x, texto, attr=0):
 
 def dibujar_tablero(win, partida, y0, x0):
     t = partida.tablero
+    limite = partida.fila_limite
     for r in range(t.alto):
         escribir(win, y0 + r, x0, "│")
         escribir(win, y0 + r, x0 + 1 + t.ancho * 2, "│")
@@ -53,6 +71,12 @@ def dibujar_tablero(win, partida, y0, x0):
             tipo = t.celdas[r][c]
             if tipo:
                 escribir(win, y0 + r, x0 + 1 + c * 2, "  ", par(tipo))
+            elif r == limite - 1:
+                # Línea limitadora azul: justo encima de la primera fila jugable
+                escribir(win, y0 + r, x0 + 1 + c * 2, "━━",
+                         curses.color_pair(PAR_LIMITE) | curses.A_BOLD)
+            elif r < limite:
+                escribir(win, y0 + r, x0 + 1 + c * 2, "  ")      # zona prohibida
             else:
                 escribir(win, y0 + r, x0 + 1 + c * 2, " ·", curses.A_DIM)
     escribir(win, y0 + t.alto, x0, "└" + "──" * t.ancho + "┘")
@@ -60,7 +84,6 @@ def dibujar_tablero(win, partida, y0, x0):
     if partida.terminada:
         return
     p = partida.actual
-    # Sombra: dónde caería la pieza
     for r, c in p.celdas(fila=partida.fila_fantasma()):
         escribir(win, y0 + r, x0 + 1 + c * 2, "[]", curses.color_pair(PAR_FANTASMA) | curses.A_DIM)
     for r, c in p.celdas():
@@ -74,42 +97,69 @@ def dibujar_mini_pieza(win, tipo, y0, x0):
                 escribir(win, y0 + r, x0 + c * 2, "  ", par(tipo))
 
 
+def dibujar_barra(win, y, x, progreso):
+    """Barra horizontal: cada segmento toma su color según su posición,
+    así la parte llena va del azul (inicio) al rojo (final)."""
+    llenos = round(progreso * ANCHO_BARRA)
+    for i in range(ANCHO_BARRA):
+        if i < llenos:
+            color = pares_barra[i * len(pares_barra) // ANCHO_BARRA]
+            escribir(win, y, x + i, "█", color)
+        else:
+            escribir(win, y, x + i, "░", curses.A_DIM)
+    escribir(win, y, x + ANCHO_BARRA + 1, f"{progreso * 100:3.0f}%")
+
+
 def dibujar_panel(win, partida, y0, x0, pausado):
     m = partida.motor
     negrita = curses.A_BOLD
-    escribir(win, y0, x0, "MOTOR ALEATORIO", negrita)
-    escribir(win, y0 + 1, x0, f"[{partida.clave_motor}] {m.nombre}", curses.A_REVERSE)
-    escribir(win, y0 + 2, x0, f"Semilla: {m.semilla_inicial}")
-    if isinstance(m, CuadradoMedio):
-        escribir(win, y0 + 3, x0, f"Re-siembras: {m.resiembras}")
 
-    escribir(win, y0 + 5, x0, "Últimos números:", negrita)
-    for i, valor in enumerate(list(m.historial)[-5:][::-1]):
-        escribir(win, y0 + 6 + i, x0, f"  {valor}", 0 if i else negrita)
-
+    # --- Motor ---
+    escribir(win, y0, x0, f"MOTOR [{partida.clave_motor}] {m.nombre}", curses.A_REVERSE)
+    extra = f"   Re-siembras: {m.resiembras}" if isinstance(m, CuadradoMedio) else ""
+    escribir(win, y0 + 1, x0, f"Semilla: {m.semilla_inicial}{extra}")
+    escribir(win, y0 + 2, x0, "Últimos números:")
+    for i, valor in enumerate(list(m.historial)[-3:][::-1]):
+        escribir(win, y0 + 3 + i, x0 + 2, str(valor), 0 if i else negrita)
     pieza = partida.ultimo_sorteo.get("pieza")
     columna = partida.ultimo_sorteo.get("columna")
     if pieza:
-        escribir(win, y0 + 12, x0, f"Próxima pieza: rango(7) -> {pieza[0]}")
+        escribir(win, y0 + 6, x0, f"Próxima pieza: rango(7) -> {pieza[0]}")
     if columna:
-        escribir(win, y0 + 13, x0, f"Columna:       rango(n) -> {columna[0]}")
+        escribir(win, y0 + 7, x0, f"Columna:       rango(n) -> {columna[0]}")
 
+    # --- Progreso ---
+    escribir(win, y0 + 9, x0, f"NIVEL {partida.nivel}/{len(METAS_NIVEL)}", negrita)
+    corazones = "♥" * partida.vidas + "♡" * (VIDAS_INICIALES - partida.vidas)
+    escribir(win, y0 + 9, x0 + 14, "Vidas ")
+    escribir(win, y0 + 9, x0 + 20, corazones, curses.color_pair(PAR_VIDA) | negrita)
+    escribir(win, y0 + 10, x0, f"Puntos del nivel: {partida.puntos_nivel} / {partida.meta_actual}")
+    dibujar_barra(win, y0 + 11, x0, partida.progreso)
+    escribir(win, y0 + 12, x0, f"Total: {partida.puntos}   Líneas: {partida.lineas}")
+    escribir(win, y0 + 13, x0, f"Velocidad: x{partida.multiplicador_velocidad:.2f}   "
+                               f"Zona: {partida.filas_efectivas}x{partida.tablero.ancho}")
+
+    # --- Siguiente pieza ---
     escribir(win, y0 + 15, x0, "Siguiente:", negrita)
-    dibujar_mini_pieza(win, partida.siguiente_tipo, y0 + 16, x0 + 12)
+    dibujar_mini_pieza(win, partida.siguiente_tipo, y0 + 15, x0 + 12)
 
-    escribir(win, y0 + 19, x0, f"Líneas: {partida.lineas}   Piezas: {partida.piezas_colocadas}")
-    escribir(win, y0 + 21, x0, "←→ mover  ↑ rotar  ↓ bajar  espacio soltar", curses.A_DIM)
-    escribir(win, y0 + 22, x0, "1/2/3 cambiar motor   p pausa   q salir", curses.A_DIM)
+    escribir(win, y0 + 19, x0, "←→ mover  ↑ rotar  ↓ bajar  espacio soltar", curses.A_DIM)
+    escribir(win, y0 + 20, x0, "1/2/3 cambiar motor   p pausa   q salir", curses.A_DIM)
 
     if pausado:
-        escribir(win, y0 + 17, x0 + 22, " PAUSA ", curses.A_REVERSE | negrita)
+        escribir(win, y0 + 17, x0, " PAUSA ", curses.A_REVERSE | negrita)
+
+
+def dibujar_aviso(win, texto, y0, x0):
+    escribir(win, y0 + 9, x0 + 2, f" {texto:^16} ", curses.A_REVERSE | curses.A_BOLD)
 
 
 def dibujar_fin(win, partida, y0, x0):
-    lineas = ["  FIN DEL JUEGO  ", f"  Líneas: {partida.lineas:<7} ",
-              "  r: reiniciar   ", "  q: salir       "]
+    titulo = "¡GANASTE!" if partida.ganada else "FIN DEL JUEGO"
+    lineas = [f"{titulo:^16}", f"Puntos: {partida.puntos:<8}",
+              f"Nivel:  {partida.nivel:<8}", "r: reiniciar    ", "q: salir        "]
     for i, texto in enumerate(lineas):
-        escribir(win, y0 + 8 + i, x0 + 2, texto, curses.A_REVERSE | curses.A_BOLD)
+        escribir(win, y0 + 7 + i, x0 + 2, f" {texto} ", curses.A_REVERSE | curses.A_BOLD)
 
 
 def pantalla_pequena(win):
@@ -145,6 +195,7 @@ def jugar(win, clave_motor):
     partida = Partida(clave_motor)
     ultimo_paso = time.monotonic()
     pausado = False
+    aviso, aviso_hasta = None, 0.0
 
     while True:
         alto, ancho = win.getmaxyx()
@@ -159,11 +210,19 @@ def jugar(win, clave_motor):
             partida.bajar()
             ultimo_paso = ahora
 
+        if partida.evento:
+            aviso = f"¡NIVEL {partida.nivel}!" if partida.evento == "nivel" else "¡Perdiste una vida!"
+            aviso_hasta = ahora + DURACION_AVISO
+            partida.evento = None
+
+        x_panel = 2 + partida.tablero.ancho * 2 + 5
         win.erase()
         dibujar_tablero(win, partida, 1, 2)
-        dibujar_panel(win, partida, 1, 2 + partida.tablero.ancho * 2 + 5, pausado)
+        dibujar_panel(win, partida, 1, x_panel, pausado)
         if partida.terminada:
             dibujar_fin(win, partida, 1, 2)
+        elif aviso and ahora < aviso_hasta:
+            dibujar_aviso(win, aviso, 1, 2)
         win.refresh()
 
         tecla = win.getch()

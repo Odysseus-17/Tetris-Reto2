@@ -3,8 +3,12 @@ Lógica de una partida, sin nada de dibujo. Aquí es donde el motor de
 números aleatorios decide:
   1. Qué pieza aparece          -> motor.rango(7)
   2. En qué columna aparece     -> motor.rango(ancho_tablero - ancho_pieza + 1)
+
+También maneja niveles, vidas, la línea limitadora y la velocidad.
 """
 from motores import MOTORES, semilla_por_reloj
+from .config import (PUNTOS_POR_LINEA, METAS_NIVEL, VIDAS_INICIALES,
+                     FILAS_POR_VIDA, INTERVALO_BASE, INCREMENTO_VELOCIDAD)
 from .piezas import Pieza, ORDEN, rotar
 from .tablero import Tablero
 
@@ -17,14 +21,49 @@ class Partida:
         self.tablero = Tablero(ancho, alto)
         self.lineas = 0
         self.piezas_colocadas = 0
+        self.puntos = 0            # total de la partida
+        self.puntos_nivel = 0      # avance dentro del nivel actual
+        self.nivel = 1
+        self.vidas = VIDAS_INICIALES
         self.terminada = False
-        self.intervalo_caida = 0.6           # segundos entre cada paso de gravedad
-        self.ultimo_sorteo = {}              # para mostrar en el panel
+        self.ganada = False
+        self.evento = None         # "vida" o "nivel": la interfaz lo muestra y lo limpia
+        self.ultimo_sorteo = {}    # para mostrar en el panel
         self.cambiar_motor(clave_motor, semilla)
 
         self.siguiente_tipo = self._sortear_tipo()
         self.actual = None
         self._aparecer()
+
+    # ---------- Valores derivados ----------
+
+    @property
+    def fila_limite(self):
+        """Primera fila jugable. Las filas por encima están prohibidas.
+        5 vidas -> 0 (20 filas), 4 -> 2 (18), 3 -> 4 (16), 2 -> 6 (14), 1 -> 8 (12)."""
+        return (VIDAS_INICIALES - self.vidas) * FILAS_POR_VIDA
+
+    @property
+    def filas_efectivas(self):
+        return self.tablero.alto - self.fila_limite
+
+    @property
+    def meta_actual(self):
+        return METAS_NIVEL[self.nivel - 1]
+
+    @property
+    def progreso(self):
+        """Fracción entre 0 y 1 del nivel actual, para la barra de avance."""
+        return min(self.puntos_nivel / self.meta_actual, 1.0)
+
+    @property
+    def multiplicador_velocidad(self):
+        return 1 + INCREMENTO_VELOCIDAD * (self.nivel - 1)
+
+    @property
+    def intervalo_caida(self):
+        # Más velocidad = menos tiempo entre cada paso de gravedad
+        return INTERVALO_BASE / self.multiplicador_velocidad
 
     # ---------- Motor de números aleatorios ----------
 
@@ -54,12 +93,51 @@ class Partida:
         pieza.columna = self._sortear_columna(pieza.ancho)
         self.actual = pieza
         if not self.tablero.cabe(pieza):
-            self.terminada = True
+            # Solo puede pasar con 5 vidas (sin línea): el tablero llegó al techo
+            self._perder_vida()
 
     def _fijar(self):
         self.tablero.fijar(self.actual)
-        self.lineas += self.tablero.limpiar_lineas()
         self.piezas_colocadas += 1
+        self._sumar_lineas(self.tablero.limpiar_lineas())
+        if self.terminada:            # ganó con esta pieza
+            return
+        if self._sobrepasa_limite():
+            self._perder_vida()
+        else:
+            self._aparecer()
+
+    def _sobrepasa_limite(self):
+        return any(any(celda is not None for celda in self.tablero.celdas[r])
+                   for r in range(self.fila_limite))
+
+    # ---------- Puntos, niveles y vidas ----------
+
+    def _sumar_lineas(self, cantidad):
+        if cantidad == 0:
+            return
+        ganados = cantidad * PUNTOS_POR_LINEA
+        self.lineas += cantidad
+        self.puntos += ganados
+        self.puntos_nivel += ganados
+        if self.puntos_nivel >= self.meta_actual:
+            if self.nivel == len(METAS_NIVEL):
+                self.ganada = True
+                self.terminada = True
+            else:
+                self.puntos_nivel = 0   # cada nivel empieza de cero; el sobrante se descarta
+                self.nivel += 1
+                self.evento = "nivel"
+
+    def _perder_vida(self):
+        self.vidas -= 1
+        if self.vidas == 0:
+            self.terminada = True
+            return
+        # La línea bajó: se limpia el tablero para empezar en la zona más pequeña.
+        # Los puntos y el nivel se conservan.
+        self.tablero = Tablero(self.tablero.ancho, self.tablero.alto)
+        self.evento = "vida"
         self._aparecer()
 
     # ---------- Acciones del jugador ----------
@@ -91,7 +169,7 @@ class Partida:
         return False
 
     def caida_dura(self):
-        while self.bajar():
+        while not self.terminada and self.bajar():
             pass
 
     def fila_fantasma(self):
