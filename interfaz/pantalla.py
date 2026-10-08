@@ -9,6 +9,7 @@ from motores import MOTORES, CuadradoMedio
 from juego.config import VIDAS_INICIALES, METAS_NIVEL
 from juego.partida import Partida
 from juego.piezas import FORMAS, ORDEN
+from audio.reproductor import Audio
 
 FILAS_MIN, COLUMNAS_MIN = 24, 64
 TICK_MS = 30
@@ -110,7 +111,7 @@ def dibujar_barra(win, y, x, progreso):
     escribir(win, y, x + ANCHO_BARRA + 1, f"{progreso * 100:3.0f}%")
 
 
-def dibujar_panel(win, partida, y0, x0, pausado):
+def dibujar_panel(win, partida, y0, x0, pausado, audio):
     m = partida.motor
     negrita = curses.A_BOLD
 
@@ -139,12 +140,31 @@ def dibujar_panel(win, partida, y0, x0, pausado):
     escribir(win, y0 + 13, x0, f"Velocidad: x{partida.multiplicador_velocidad:.2f}   "
                                f"Zona: {partida.filas_efectivas}x{partida.tablero.ancho}")
 
+    if partida.hardcore:
+        flecha = ""
+        if partida.ultimo_temblor:
+            d, tirada, se_movio = partida.ultimo_temblor
+            flecha = f"  último: {'←' if d < 0 else '→'}{'' if se_movio else ' (bloq.)'}"
+        escribir(win, y0 + 14, x0, f"HARDCORE {partida.probabilidad_temblor}%{flecha}",
+                 curses.color_pair(PAR_VIDA) | negrita)
+    else:
+        escribir(win, y0 + 14, x0, "Hardcore: apagado (t)", curses.A_DIM)
+
     # --- Siguiente pieza ---
     escribir(win, y0 + 15, x0, "Siguiente:", negrita)
     dibujar_mini_pieza(win, partida.siguiente_tipo, y0 + 15, x0 + 12)
 
+    # --- Sonido ---
+    if not audio.disponible:
+        texto_audio = "Sonido: no disponible"
+    elif audio.silenciado:
+        texto_audio = "♪ silenciado   (m activar)"
+    else:
+        texto_audio = f"♪ {audio.info_musica or 'componiendo...'}   (m silenciar)"
+    escribir(win, y0 + 18, x0, texto_audio, curses.A_DIM if audio.silenciado else 0)
+
     escribir(win, y0 + 19, x0, "←→ mover  ↑ rotar  ↓ bajar  espacio soltar", curses.A_DIM)
-    escribir(win, y0 + 20, x0, "1/2/3 cambiar motor   p pausa   q salir", curses.A_DIM)
+    escribir(win, y0 + 20, x0, "1/2/3 motor  t hardcore  p pausa  q salir", curses.A_DIM)
 
     if pausado:
         escribir(win, y0 + 17, x0, " PAUSA ", curses.A_REVERSE | negrita)
@@ -180,8 +200,9 @@ def menu(win):
         escribir(win, 4, 4, "Elige el motor de números aleatorios:")
         for i, (clave, Motor) in enumerate(MOTORES.items()):
             escribir(win, 6 + i, 6, f"[{clave}] {Motor.nombre}")
-        escribir(win, 10, 4, "Se puede cambiar durante la partida con 1, 2 y 3.", curses.A_DIM)
-        escribir(win, 12, 4, "q para salir", curses.A_DIM)
+        escribir(win, 10, 4, "En la partida: 1, 2, 3 cambian el motor,", curses.A_DIM)
+        escribir(win, 11, 4, "t activa el modo hardcore y m silencia el sonido.", curses.A_DIM)
+        escribir(win, 13, 4, "q para salir", curses.A_DIM)
         win.refresh()
         tecla = win.getch()
         if tecla == ord("q"):
@@ -190,11 +211,12 @@ def menu(win):
             return chr(tecla)
 
 
-def jugar(win, clave_motor):
+def jugar(win, clave_motor, audio):
     """Devuelve True si el jugador pide reiniciar, False si sale."""
     partida = Partida(clave_motor)
     ultimo_paso = time.monotonic()
     pausado = False
+    audio.pausado = False
     aviso, aviso_hasta = None, 0.0
 
     while True:
@@ -207,8 +229,17 @@ def jugar(win, clave_motor):
 
         ahora = time.monotonic()
         if not (pausado or partida.terminada) and ahora - ultimo_paso >= partida.intervalo_caida:
-            partida.bajar()
+            partida.paso_gravedad()
             ultimo_paso = ahora
+
+        # Sonido: efectos pendientes y música según motor y nivel
+        for nombre in partida.sonidos:
+            audio.efecto(nombre)
+        partida.sonidos.clear()
+        if partida.terminada:
+            audio.detener_musica()
+        else:
+            audio.musica_para(type(partida.motor), partida.motor.semilla_inicial, partida.nivel)
 
         if partida.evento:
             aviso = f"¡NIVEL {partida.nivel}!" if partida.evento == "nivel" else "¡Perdiste una vida!"
@@ -218,7 +249,7 @@ def jugar(win, clave_motor):
         x_panel = 2 + partida.tablero.ancho * 2 + 5
         win.erase()
         dibujar_tablero(win, partida, 1, 2)
-        dibujar_panel(win, partida, 1, x_panel, pausado)
+        dibujar_panel(win, partida, 1, x_panel, pausado, audio)
         if partida.terminada:
             dibujar_fin(win, partida, 1, 2)
         elif aviso and ahora < aviso_hasta:
@@ -230,12 +261,16 @@ def jugar(win, clave_motor):
             continue
         if tecla == ord("q"):
             return False
+        if tecla in (ord("m"), ord("M")):
+            audio.alternar_silencio()
+            continue
         if partida.terminada:
             if tecla == ord("r"):
                 return True
             continue
         if tecla == ord("p"):
             pausado = not pausado
+            audio.pausado = pausado
             continue
         if pausado:
             continue
@@ -252,6 +287,8 @@ def jugar(win, clave_motor):
         elif tecla == ord(" "):
             partida.caida_dura()
             ultimo_paso = ahora
+        elif tecla in (ord("t"), ord("T")):
+            partida.alternar_hardcore()
         elif chr(tecla) in MOTORES:
             partida.cambiar_motor(chr(tecla))
 
@@ -261,9 +298,14 @@ def principal(win):
     iniciar_colores()
     win.keypad(True)
     win.timeout(TICK_MS)   # getch() espera como máximo 30 ms: el juego no se congela
-    while True:
-        clave = menu(win)
-        if clave is None:
-            return
-        while jugar(win, clave):
-            pass
+    audio = Audio()
+    try:
+        while True:
+            clave = menu(win)
+            if clave is None:
+                return
+            while jugar(win, clave, audio):
+                pass
+            audio.detener_musica()
+    finally:
+        audio.cerrar()

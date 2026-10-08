@@ -15,3 +15,7 @@ FILAS_POR_VIDA = 2          # cuánto baja la línea azul por cada vida perdida
 
 INTERVALO_BASE = 0.6        # segundos entre pasos de gravedad en el nivel 1
 INCREMENTO_VELOCIDAD = 0.05 # +5% por nivel: nivel 5 -> x1.20
+
+# Modo hardcore (tecla T): probabilidad (%) de que la pieza tiemble
+# una columna en cada paso de gravedad, según el nivel.
+PROBABILIDAD_TEMBLOR = (10, 15, 20, 25, 30)

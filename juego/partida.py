@@ -3,12 +3,15 @@ Lógica de una partida, sin nada de dibujo. Aquí es donde el motor de
 números aleatorios decide:
   1. Qué pieza aparece          -> motor.rango(7)
   2. En qué columna aparece     -> motor.rango(ancho_tablero - ancho_pieza + 1)
+  3. Si la pieza tiembla         -> motor.rango(100) < probabilidad   (modo hardcore)
+     y hacia dónde               -> motor.rango(2)
 
 También maneja niveles, vidas, la línea limitadora y la velocidad.
 """
 from motores import MOTORES, semilla_por_reloj
 from .config import (PUNTOS_POR_LINEA, METAS_NIVEL, VIDAS_INICIALES,
-                     FILAS_POR_VIDA, INTERVALO_BASE, INCREMENTO_VELOCIDAD)
+                     FILAS_POR_VIDA, INTERVALO_BASE, INCREMENTO_VELOCIDAD,
+                     PROBABILIDAD_TEMBLOR)
 from .piezas import Pieza, ORDEN, rotar
 from .tablero import Tablero
 
@@ -27,7 +30,11 @@ class Partida:
         self.vidas = VIDAS_INICIALES
         self.terminada = False
         self.ganada = False
+        self.hardcore = False
+        self.temblores = 0
+        self.ultimo_temblor = None  # (dirección, tirada, si se pudo mover)
         self.evento = None         # "vida" o "nivel": la interfaz lo muestra y lo limpia
+        self.sonidos = []          # efectos pendientes; la interfaz los reproduce y vacía
         self.ultimo_sorteo = {}    # para mostrar en el panel
         self.cambiar_motor(clave_motor, semilla)
 
@@ -61,6 +68,10 @@ class Partida:
         return 1 + INCREMENTO_VELOCIDAD * (self.nivel - 1)
 
     @property
+    def probabilidad_temblor(self):
+        return PROBABILIDAD_TEMBLOR[self.nivel - 1]
+
+    @property
     def intervalo_caida(self):
         # Más velocidad = menos tiempo entre cada paso de gravedad
         return INTERVALO_BASE / self.multiplicador_velocidad
@@ -84,6 +95,29 @@ class Partida:
         self.ultimo_sorteo["columna"] = (columna, self.motor.historial[-1])
         return columna
 
+    # ---------- Modo hardcore: temblor en vuelo ----------
+
+    def alternar_hardcore(self):
+        self.hardcore = not self.hardcore
+
+    def _temblar(self):
+        tirada = self.motor.rango(100)              # 0..99
+        if tirada >= self.probabilidad_temblor:
+            return
+        direccion = -1 if self.motor.rango(2) == 0 else 1
+        se_movio = self.mover(direccion, sonido=False)  # si choca, no se mueve
+        if se_movio:
+            self.sonidos.append("temblor")
+        self.temblores += 1
+        self.ultimo_temblor = (direccion, tirada, se_movio)
+
+    def paso_gravedad(self):
+        """Lo que pasa en cada tic del reloj: primero el posible temblor,
+        después la pieza baja una fila."""
+        if self.hardcore:
+            self._temblar()
+        self.bajar()
+
     # ---------- Ciclo de vida de las piezas ----------
 
     def _aparecer(self):
@@ -99,7 +133,9 @@ class Partida:
     def _fijar(self):
         self.tablero.fijar(self.actual)
         self.piezas_colocadas += 1
-        self._sumar_lineas(self.tablero.limpiar_lineas())
+        eliminadas = self.tablero.limpiar_lineas()
+        self.sonidos.append(f"linea{min(eliminadas, 4)}" if eliminadas else "fijar")
+        self._sumar_lineas(eliminadas)
         if self.terminada:            # ganó con esta pieza
             return
         if self._sobrepasa_limite():
@@ -124,28 +160,35 @@ class Partida:
             if self.nivel == len(METAS_NIVEL):
                 self.ganada = True
                 self.terminada = True
+                self.sonidos.append("victoria")
             else:
                 self.puntos_nivel = 0   # cada nivel empieza de cero; el sobrante se descarta
+                self.tablero = Tablero(self.tablero.ancho, self.tablero.alto)  # tablero limpio
                 self.nivel += 1
                 self.evento = "nivel"
+                self.sonidos.append("nivel")
 
     def _perder_vida(self):
         self.vidas -= 1
         if self.vidas == 0:
             self.terminada = True
+            self.sonidos.append("fin")
             return
         # La línea bajó: se limpia el tablero para empezar en la zona más pequeña.
         # Los puntos y el nivel se conservan.
         self.tablero = Tablero(self.tablero.ancho, self.tablero.alto)
         self.evento = "vida"
+        self.sonidos.append("vida")
         self._aparecer()
 
     # ---------- Acciones del jugador ----------
 
-    def mover(self, dc):
+    def mover(self, dc, sonido=True):
         p = self.actual
         if self.tablero.cabe(p, columna=p.columna + dc):
             p.columna += dc
+            if sonido:
+                self.sonidos.append("mover")
             return True
         return False
 
@@ -156,6 +199,7 @@ class Partida:
             if self.tablero.cabe(p, forma=nueva, columna=p.columna + dc):
                 p.forma = nueva
                 p.columna += dc
+                self.sonidos.append("rotar")
                 return True
         return False
 

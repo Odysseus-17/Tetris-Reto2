@@ -100,3 +100,29 @@ p._perder_vida()
 ok((p.nivel, p.puntos_nivel, p.puntos, p.vidas) == (3, 1200, 4200, 4), "nivel y puntos intactos, una vida menos")
 print("Reinicio tras game over")
 ok(Partida("3").nivel == 1 and Partida("3").vidas == 5, "una partida nueva arranca en nivel 1 con 5 vidas")
+
+print("Subir de nivel limpia el tablero")
+p = Partida("3", semilla=13)
+p.tablero.celdas[19][0] = "O"
+p.puntos_nivel = 900
+p._sumar_lineas(1)
+ok(p.nivel == 2 and all(c is None for f in p.tablero.celdas for c in f), "nivel 2 con tablero vacío")
+
+print("Modo hardcore")
+p = Partida("3", semilla=17)
+antes = p.motor.generados
+p.paso_gravedad()
+ok(p.motor.generados == antes, "apagado: la gravedad no consume números del motor")
+p = Partida("3", semilla=17)
+p.alternar_hardcore()
+tiradas = 0
+for _ in range(2000):
+    if p.terminada:
+        break
+    p.paso_gravedad()
+    tiradas += 1
+ok(p.temblores > 0, f"encendido: hubo {p.temblores} temblores en {tiradas} pasos")
+ok(abs(p.temblores / tiradas - 0.10) < 0.04, f"frecuencia {p.temblores / tiradas:.1%} cerca del 10% del nivel 1")
+ok(all(0 <= c < 10 for _, c in p.actual.celdas()), "el temblor nunca saca la pieza del tablero")
+p.nivel = 5
+ok(p.probabilidad_temblor == 30, "nivel 5: 30%")
