@@ -164,7 +164,7 @@ def dibujar_panel(win, partida, y0, x0, pausado, audio):
     escribir(win, y0 + 18, x0, texto_audio, curses.A_DIM if audio.silenciado else 0)
 
     escribir(win, y0 + 19, x0, "←→ mover  ↑ rotar  ↓ bajar  espacio soltar", curses.A_DIM)
-    escribir(win, y0 + 20, x0, "1/2/3 motor  t hardcore  p pausa  q salir", curses.A_DIM)
+    escribir(win, y0 + 20, x0, "1-4 motor  t hardcore  p pausa  q salir", curses.A_DIM)
 
     if pausado:
         escribir(win, y0 + 17, x0, " PAUSA ", curses.A_REVERSE | negrita)
@@ -200,9 +200,10 @@ def menu(win):
         escribir(win, 4, 4, "Elige el motor de números aleatorios:")
         for i, (clave, Motor) in enumerate(MOTORES.items()):
             escribir(win, 6 + i, 6, f"[{clave}] {Motor.nombre}")
-        escribir(win, 10, 4, "En la partida: 1, 2, 3 cambian el motor,", curses.A_DIM)
-        escribir(win, 11, 4, "t activa el modo hardcore y m silencia el sonido.", curses.A_DIM)
-        escribir(win, 13, 4, "q para salir", curses.A_DIM)
+        fila = 6 + len(MOTORES) + 1
+        escribir(win, fila, 4, "En la partida: 1-4 cambian el motor,", curses.A_DIM)
+        escribir(win, fila + 1, 4, "t activa el modo hardcore y m silencia el sonido.", curses.A_DIM)
+        escribir(win, fila + 3, 4, "q para salir", curses.A_DIM)
         win.refresh()
         tecla = win.getch()
         if tecla == ord("q"):

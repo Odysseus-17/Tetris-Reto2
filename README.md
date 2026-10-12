@@ -22,7 +22,7 @@ El jugador puede cambiar de motor en plena partida y ver en un panel los número
   │ · · · · · · · · · ·│   Siguiente:
   │ · · · · · ·[][] · ·│   ♪ Do mayor · 100 bpm   (m silenciar)
   │ · · · · ·[][] · · ·│   ←→ mover  ↑ rotar  ↓ bajar  espacio soltar
-  └────────────────────┘   1/2/3 motor  t hardcore  p pausa  q salir
+  └────────────────────┘   1-4 motor  t hardcore  p pausa  q salir
 ```
 
 ---
@@ -137,7 +137,7 @@ python3 main.py
 | `↑` | Rotar |
 | `↓` | Bajar más rápido |
 | `Espacio` | Soltar la pieza de golpe |
-| `1` `2` `3` | Cambiar el motor de números aleatorios en plena partida |
+| `1` `2` `3` `4` | Cambiar el motor de números aleatorios en plena partida |
 | `T` | Activar o desactivar el modo hardcore |
 | `M` | Silenciar o activar el sonido |
 | `P` | Pausa |
@@ -150,7 +150,7 @@ El dispositivo de entrada es el **teclado**.
 
 ## Motores de números aleatorios
 
-Los tres motores comparten la misma interfaz (`motores/base.py`): el juego solo llama a `motor.rango(n)`, que devuelve un entero entre `0` y `n − 1`. Por eso cambiar de motor no cambia nada más del código.
+Los cuatro motores comparten la misma interfaz (`motores/base.py`): el juego solo llama a `motor.rango(n)`, que devuelve un entero entre `0` y `n − 1`. Por eso cambiar de motor no cambia nada más del código.
 
 `rango(n)` escala el número (`x · n // MÁXIMO`) en vez de usar `x % n`, para que el resultado dependa de los bits altos, que en los generadores congruenciales son los de mejor calidad.
 
@@ -161,6 +161,7 @@ La semilla sale del reloj del sistema en nanosegundos (`time.time_ns()`), que no
 | `1` | **Cuadrado medio** (von Neumann, 1946) | Elevar al cuadrado un número de 8 dígitos y tomar los 8 del centro | Corto y variable | Se degenera (cae en 0 o en ciclos). El motor lo detecta y se **re-siembra**; el panel muestra cuántas veces. |
 | `2` | **Congruencial lineal** (Lehmer, 1949) | `X(n+1) = (a·X(n) + c) mod m`<br>a = 1 664 525, c = 1 013 904 223, m = 2³² | 2³² (completo, por el teorema de Hull-Dobell) | Sus bits bajos son predecibles: el último bit alterna 0, 1, 0, 1… |
 | `3` | **PCG32 XSH-RR** (O'Neill, 2014) | LCG de 64 bits + permutación de la salida (xorshift y rotación variable) | 2⁶⁴ | Corrige el defecto del LCG. Verificado contra la implementación de referencia en C. |
+| `4` | **Xoshiro256\*\*** (Blackman y Vigna, 2018) | Estado de 4 × 64 bits mezclado solo con XOR, desplazamientos y rotaciones; salida `rotl(s1·5, 7)·9` | 2²⁵⁶ − 1 | Otra familia: sin multiplicación congruencial. El estado se siembra con SplitMix64. Entrega 64 bits por número. Verificado contra los vectores de referencia. |
 
 ---
 
@@ -234,7 +235,7 @@ El audio se mezcla en un hilo aparte y se envía a un único proceso del sistema
 Las pruebas no usan librerías externas ni necesitan abrir la interfaz.
 
 ```bash
-python3 pruebas_motores.py   # los tres generadores
+python3 pruebas_motores.py   # los cuatro generadores
 python3 pruebas_juego.py     # lógica del Tetris, niveles, vidas, hardcore
 python3 pruebas_audio.py     # sintetizador, música y mezclador (no necesita parlantes)
 ```
@@ -243,9 +244,9 @@ En Windows, reemplazar `python3` por `py`.
 
 | Archivo | Qué verifica |
 |---|---|
-| `pruebas_motores.py` | PCG32 contra la referencia oficial; teorema de Hull-Dobell; degeneración del cuadrado medio; defecto de los bits bajos del LCG; distribución de 70 000 piezas por motor con prueba de **chi-cuadrado** |
+| `pruebas_motores.py` | PCG32, Xoshiro256** y SplitMix64 contra sus referencias; teorema de Hull-Dobell; degeneración del cuadrado medio; defecto de los bits bajos del LCG; distribución de 70 000 piezas por motor con prueba de **chi-cuadrado** |
 | `pruebas_juego.py` | Rotación, colisiones, limpieza de líneas, aparición controlada por el motor, cambio de motor, puntaje, niveles, vidas, línea limitadora, velocidad y frecuencia del temblor |
-| `pruebas_audio.py` | Afinación del sintetizador; 13 710 notas generadas con los 3 motores, 5 niveles y 20 semillas, todas dentro de la escala y ancladas a los acordes; ritmo del mezclador |
+| `pruebas_audio.py` | Afinación del sintetizador; 18 215 notas generadas con los 4 motores, 5 niveles y 20 semillas, todas dentro de la escala y ancladas a los acordes; ritmo del mezclador |
 
 **Demostración del sonido** sin abrir el juego:
 
@@ -265,7 +266,8 @@ Tetris-Reto2/
 │   ├── base.py              #   interfaz común: siguiente() y rango(n)
 │   ├── cuadrado_medio.py
 │   ├── congruencial.py
-│   └── pcg.py
+│   ├── pcg.py
+│   └── xoshiro.py
 ├── juego/                   # reglas del juego, sin nada de interfaz
 │   ├── config.py            #   todos los valores ajustables
 │   ├── piezas.py

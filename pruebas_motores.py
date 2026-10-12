@@ -1,8 +1,9 @@
 """
-Pruebas de los tres motores, independientes del juego.
+Pruebas de los cuatro motores, independientes del juego.
 Ejecutar:  python3 pruebas_motores.py
 """
-from motores import CuadradoMedio, CongruencialLineal, PCG32, cumple_hull_dobell
+from motores import CuadradoMedio, CongruencialLineal, PCG32, Xoshiro256, cumple_hull_dobell
+from motores.xoshiro import splitmix64
 
 PIEZAS = "IOTSZJL"
 SEMILLA = 12345
@@ -36,6 +37,21 @@ print("   obtenidos :", " ".join(f"{v:08x}" for v in obtenidos))
 print("   referencia:", " ".join(f"{v:08x}" for v in referencia))
 print("   ¿Coinciden?", obtenidos == referencia)
 
+seccion("1b. Verificación de Xoshiro256** y SplitMix64 contra la referencia")
+xo = Xoshiro256(estado=[1, 2, 3, 4])
+obtenidos = [xo.siguiente() for _ in range(6)]
+referencia = [11520, 0, 1509978240, 1215971899390074240,
+              1216172134540287360, 607988272756665600]
+print("   Xoshiro256** con estado {1, 2, 3, 4}")
+print("   obtenidos :", obtenidos)
+print("   referencia:", referencia)
+print("   ¿Coinciden?", obtenidos == referencia)
+sm = splitmix64(1234567)
+obtenidos = [next(sm) for _ in range(3)]
+referencia = [6457827717110365317, 3203168211198807973, 9817491932198370423]
+print("   SplitMix64 con semilla 1234567 (siembra el estado de Xoshiro)")
+print("   ¿Coinciden?", obtenidos == referencia)
+
 seccion("2. Hull-Dobell para el LCG")
 print("   a=1664525, c=1013904223, m=2^32 ->", cumple_hull_dobell(1664525, 1013904223, 2**32))
 print("   a=1664525, c=1013904224, m=2^32 ->", cumple_hull_dobell(1664525, 1013904224, 2**32),
@@ -51,7 +67,7 @@ lcg = CongruencialLineal(semilla=SEMILLA)
 print("   x % 2 ->", [lcg.siguiente() % 2 for _ in range(20)])
 print("   Por eso rango() escala con los bits altos en vez de usar x % n.")
 
-for Motor, kwargs in [(CuadradoMedio, {}), (CongruencialLineal, {}), (PCG32, {})]:
+for Motor, kwargs in [(CuadradoMedio, {}), (CongruencialLineal, {}), (PCG32, {}), (Xoshiro256, {})]:
     seccion(f"Distribución de piezas: {Motor.nombre} (semilla {SEMILLA})")
     motor = Motor(semilla=SEMILLA, **kwargs)
     chi = histograma(motor, 7, PIEZAS)

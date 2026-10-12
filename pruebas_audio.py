@@ -19,7 +19,7 @@ ok(abs(cruces - 440) <= 1, f"un La de 1 s tiene 440 ciclos ({cruces})")
 ok(len(a_pcm16(la)) == 2 * TASA, "1 s de audio = 44100 bytes en PCM de 16 bits")
 ok(all(abs(v) <= 1 for v in crear_efectos()["fijar"]), "los efectos no saturan")
 
-print("Música sin disonancia (3 motores x 5 niveles x 20 semillas)")
+print(f"Música sin disonancia ({len(MOTORES)} motores x 5 niveles x 20 semillas)")
 fuera_escala = anclas_mal = saltos_grandes = total = 0
 for clave, Motor in MOTORES.items():
     for nivel in range(1, 6):
