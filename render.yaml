@@ -20,7 +20,11 @@ services:
         source: /
         destination: /web/
     headers:
-      # Pyodide y los .py casi no cambian: caché de una hora en el navegador
+      # "no-cache" no significa "no guardar": el navegador guarda los archivos
+      # pero pregunta a Render si cambiaron antes de usarlos (respuesta 304,
+      # muy rápida). Así, después de cada despliegue, todos ven la versión
+      # nueva sin tener que forzar la recarga. Pyodide viene del CDN de
+      # jsDelivr y no se ve afectado.
       - path: /*
         name: Cache-Control
-        value: public, max-age=3600
+        value: no-cache

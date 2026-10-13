@@ -416,6 +416,7 @@ La lógica (`juego/`) no depende de la interfaz ni del audio: la partida solo an
 | **Web:** "No se pudo cargar" al abrir `index.html` con doble clic | Usar un servidor local: `python3 -m http.server 8000` y abrir `http://localhost:8000/web/`. |
 | **Web:** se queda en "Descargando Python…" | Revisar la conexión a internet; la primera carga descarga Pyodide desde jsDelivr. |
 | **Web:** el juego carga en GitHub Pages pero falla al iniciar | Verificar que el archivo `.nojekyll` esté en la raíz del repositorio. |
+| **Web:** después de actualizar el juego no aparecen los cambios (por ejemplo, la tecla V no abre el modo 2 jugadores) | El navegador está usando archivos viejos guardados en caché. Recargar forzando con `Ctrl + Shift + R` (en Mac `Cmd + Shift + R`) o abrir el enlace en una ventana de incógnito. |
 | **Web:** no suena | Los navegadores solo permiten sonido después de pulsar una tecla o hacer clic; elegir el motor ya lo activa. Revisar también que no esté silenciado con `M`. |
 
 ---
