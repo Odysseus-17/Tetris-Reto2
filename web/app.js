@@ -159,6 +159,14 @@ async function iniciar() {
     $("texto-carga").textContent = "Cargando el juego…";
     await cargarArchivos(py, RAIZ, ARCHIVOS_JUEGO);
     puente = py.pyimport("puente");
+    // Si el navegador mezcló archivos de dos versiones distintas, avisar en
+    // vez de fallar en silencio más adelante.
+    const faltan = ["nueva", "estado", "nuevo_versus", "estado_versus"]
+      .filter((f) => typeof puente[f] !== "function");
+    if (faltan.length) {
+      throw new Error("El navegador cargó archivos de una versión anterior del juego. " +
+        "Recarga con Ctrl + Shift + R (en Mac Cmd + Shift + R).");
+    }
     listaMotores = JSON.parse(puente.motores());
     audio.iniciar();
     construirMenus();

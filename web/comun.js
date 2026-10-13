@@ -23,7 +23,10 @@ const ARCHIVOS_AUDIO = [
 
 async function cargarArchivos(py, raiz, archivos) {
   const textos = await Promise.all(archivos.map(async (a) => {
-    const r = await fetch(raiz + a);
+    // "no-cache": usar la copia guardada solo si el servidor confirma que no
+    // cambió. Sin esto, tras actualizar el juego el navegador podía mezclar
+    // los .py viejos con el JavaScript nuevo.
+    const r = await fetch(raiz + a, { cache: "no-cache" });
     if (!r.ok) throw new Error(`No se pudo cargar ${a} (${r.status})`);
     return r.text();
   }));
