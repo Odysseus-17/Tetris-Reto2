@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tetris — Reto 2</title>
+  <meta name="description" content="Tetris con generadores de números aleatorios propios: cuadrado medio, congruencial lineal, PCG32 y Xoshiro256**.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="cabecera">
+    <h1>TETRIS <span>Reto 2</span></h1>
+    <p>Todo el azar sale de generadores de números implementados a mano. Cambia de motor en plena partida y compara.</p>
+  </header>
+
+  <main class="juego">
+    <section class="zona-tablero">
+      <div class="marco">
+        <canvas id="tablero" aria-label="Tablero de juego"></canvas>
+
+        <div id="capa-carga" class="capa visible">
+          <div class="spinner" aria-hidden="true"></div>
+          <p id="texto-carga">Descargando Python…</p>
+          <small>Solo la primera vez tarda unos segundos.</small>
+        </div>
+
+        <div id="capa-menu" class="capa">
+          <h2>Elige el motor</h2>
+          <div id="opciones-menu" class="opciones"></div>
+          <small id="ayuda-menu">Teclas 1–4 · o haz clic</small>
+        </div>
+
+        <div id="capa-fin" class="capa">
+          <h2 id="titulo-fin">FIN DEL JUEGO</h2>
+          <dl class="resumen">
+            <dt>Puntos</dt><dd id="fin-puntos">0</dd>
+            <dt>Nivel</dt><dd id="fin-nivel">1</dd>
+          </dl>
+          <div class="botones">
+            <button id="boton-reiniciar" tabindex="-1">R · Reiniciar</button>
+            <button id="boton-menu" tabindex="-1" class="secundario">Q · Menú</button>
+          </div>
+        </div>
+
+        <div id="capa-pausa" class="capa"><h2>PAUSA</h2><small>P para continuar</small></div>
+        <div id="aviso" class="aviso"></div>
+
+        <div id="capa-error" class="capa">
+          <h2>No se pudo cargar</h2>
+          <p id="texto-error"></p>
+        </div>
+      </div>
+
+      <div class="tactil" aria-label="Controles táctiles">
+        <button data-accion="izquierda" tabindex="-1" aria-label="Mover a la izquierda">←</button>
+        <button data-accion="rotar" tabindex="-1" aria-label="Rotar">↻</button>
+        <button data-accion="derecha" tabindex="-1" aria-label="Mover a la derecha">→</button>
+        <button data-accion="bajar" tabindex="-1" aria-label="Bajar">↓</button>
+        <button data-accion="soltar" tabindex="-1" aria-label="Soltar">⤓</button>
+        <button data-accion="pausa" tabindex="-1" aria-label="Pausa">❚❚</button>
+      </div>
+
+      <div class="controles">
+        <p><kbd>←</kbd><kbd>→</kbd> mover <kbd>↑</kbd> rotar <kbd>↓</kbd> bajar <kbd>Espacio</kbd> soltar</p>
+        <p><kbd id="tecla-motores">1–4</kbd> motor <kbd>T</kbd> hardcore <kbd>M</kbd> sonido</p>
+        <p><kbd>P</kbd> pausa <kbd>Q</kbd> menú</p>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="tarjeta">
+        <h3>Motor aleatorio</h3>
+        <div id="pestanas-motor" class="pestanas"></div>
+        <p class="dato">Semilla <b id="semilla">—</b></p>
+        <p class="dato" id="fila-resiembras" hidden>Re-siembras <b id="resiembras">0</b></p>
+        <p class="etiqueta">Últimos números</p>
+        <ol id="historial" class="historial"></ol>
+        <p class="sorteo">Próxima pieza: <code>rango(7)</code> → <b id="sorteo-pieza">—</b></p>
+        <p class="sorteo">Columna: <code>rango(n)</code> → <b id="sorteo-columna">—</b></p>
+      </div>
+
+      <div class="tarjeta">
+        <div class="fila-nivel">
+          <h3>Nivel <b id="nivel">1</b><span id="niveles">/5</span></h3>
+          <div id="vidas" class="vidas" aria-label="Vidas"></div>
+        </div>
+        <p class="dato">Puntos del nivel <b id="puntos-nivel">0 / 1000</b></p>
+        <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="barra">
+          <div class="barra-vacia" id="barra-vacia"></div>
+        </div>
+        <p class="porcentaje" id="porcentaje">0%</p>
+        <div class="cifras">
+          <div><span>Total</span><b id="puntos">0</b></div>
+          <div><span>Líneas</span><b id="lineas">0</b></div>
+          <div><span>Velocidad</span><b id="velocidad">×1.00</b></div>
+          <div><span>Zona</span><b id="zona">20x10</b></div>
+        </div>
+      </div>
+
+      <div class="tarjeta fila-doble">
+        <div>
+          <h3>Siguiente</h3>
+          <canvas id="siguiente" aria-label="Siguiente pieza"></canvas>
+        </div>
+        <div class="interruptores">
+          <button id="boton-hardcore" class="interruptor" tabindex="-1">
+            <span>T</span> Hardcore <b id="estado-hardcore">apagado</b>
+          </button>
+          <p class="temblor" id="temblor"></p>
+          <button id="boton-sonido" class="interruptor" tabindex="-1">
+            <span>M</span> Sonido <b id="estado-sonido">activo</b>
+          </button>
+          <p class="musica" id="musica">♪ —</p>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script src="comun.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

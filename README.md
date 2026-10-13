@@ -4,6 +4,15 @@ Tetris para la terminal escrito en Python, donde **todo lo aleatorio lo deciden 
 
 El jugador puede cambiar de motor en plena partida y ver en un panel los números que se están generando, para comparar cómo se comporta cada método.
 
+Tiene **dos interfaces que comparten exactamente la misma lógica en Python**:
+
+| Versión | Cómo se juega | Sonido |
+|---|---|---|
+| **Web** | En el navegador, en cualquier sistema operativo o celular. Publicada en GitHub Pages. | Siempre funciona (lo reproduce el navegador) |
+| **Terminal** | `python3 main.py`, con curses | Linux con `paplay`, `aplay` o `pw-play` |
+
+**▶ Jugar en línea:** https://odysseus-17.github.io/Tetris-Reto2/
+
 ```
   │ · · · · · · · · · ·│   MOTOR [3] PCG32
   │ · · · · · · · · · ·│   Semilla: 4180726106
@@ -30,6 +39,7 @@ El jugador puede cambiar de motor en plena partida y ver en un panel los número
 ## Contenido
 
 - [Inicio rápido](#inicio-rápido)
+- [Versión web](#versión-web)
 - [Requisitos del sistema](#requisitos-del-sistema)
 - [Controles](#controles)
 - [Motores de números aleatorios](#motores-de-números-aleatorios)
@@ -65,7 +75,50 @@ py main.py
 
 ---
 
-## Requisitos del sistema
+## Versión web
+
+La interfaz gráfica ejecuta **los mismos archivos Python** de `motores/`, `juego/` y `audio/` dentro del navegador, gracias a [Pyodide](https://pyodide.org) (el intérprete de Python compilado a WebAssembly). No hay servidor que ejecute el juego: todo corre en el equipo del jugador.
+
+```
+┌──────────────────────── Navegador ────────────────────────┐
+│  app.js  (dibujo en canvas, teclado, Web Audio)           │
+│     │ JSON                                                │
+│  web/puente.py ──► juego/partida.py ──► motores/*.py      │   hilo principal
+├───────────────────────────────────────────────────────────┤
+│  audio_worker.js                                          │
+│  web/puente_audio.py ──► audio/musica.py, efectos.py      │   hilo de audio
+└───────────────────────────────────────────────────────────┘
+```
+
+- `web/puente.py` cumple el mismo papel que `interfaz/pantalla.py`: traduce, no tiene reglas. Ninguna regla del juego se reescribió en JavaScript.
+- Componer la música tarda alrededor de un segundo en el navegador, así que el audio corre en un **Web Worker** (un hilo aparte) para que el juego no se congele, igual que el mezclador de la versión de terminal.
+- El sonido lo reproduce la Web Audio API del navegador, por eso funciona igual en Linux, Windows, macOS y celulares.
+
+### Jugar localmente
+
+El navegador no permite cargar los archivos `.py` abriendo `index.html` con doble clic (`file://`), así que se necesita un servidor local. Python ya trae uno:
+
+```bash
+python3 -m http.server 8000      # en Windows: py -m http.server 8000
+```
+
+Y abrir **http://localhost:8000/web/**. La primera carga descarga Pyodide (unos 10 MB) desde el CDN de jsDelivr y requiere internet; después queda en la caché del navegador.
+
+### Publicar en GitHub Pages
+
+1. Subir el repositorio completo, incluidos `index.html` y `.nojekyll` en la raíz.
+2. En GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch**, rama `main`, carpeta `/ (root)`, **Save**.
+3. En uno o dos minutos el juego queda en `https://<usuario>.github.io/<repositorio>/`.
+
+El archivo `.nojekyll` es necesario: sin él, GitHub Pages ignora los archivos que empiezan con guion bajo, como `__init__.py`, y el juego no carga. El `index.html` de la raíz solo redirige a `web/`.
+
+### Requisitos
+
+Un navegador actual (Chrome, Edge, Firefox o Safari) con JavaScript y WebAssembly. Funciona con teclado en el computador y con botones táctiles en el celular.
+
+---
+
+## Requisitos del sistema (versión de terminal)
 
 ### Comunes
 
@@ -236,7 +289,7 @@ Las pruebas no usan librerías externas ni necesitan abrir la interfaz.
 
 ```bash
 python3 pruebas_motores.py   # los cuatro generadores
-python3 pruebas_juego.py     # lógica del Tetris, niveles, vidas, hardcore
+python3 juego/pruebas_juego.py   # lógica del Tetris, niveles, vidas, hardcore
 python3 pruebas_audio.py     # sintetizador, música y mezclador (no necesita parlantes)
 ```
 
@@ -245,7 +298,7 @@ En Windows, reemplazar `python3` por `py`.
 | Archivo | Qué verifica |
 |---|---|
 | `pruebas_motores.py` | PCG32, Xoshiro256** y SplitMix64 contra sus referencias; teorema de Hull-Dobell; degeneración del cuadrado medio; defecto de los bits bajos del LCG; distribución de 70 000 piezas por motor con prueba de **chi-cuadrado** |
-| `pruebas_juego.py` | Rotación, colisiones, limpieza de líneas, aparición controlada por el motor, cambio de motor, puntaje, niveles, vidas, línea limitadora, velocidad y frecuencia del temblor |
+| `juego/pruebas_juego.py` | Rotación, colisiones, limpieza de líneas, aparición controlada por el motor, cambio de motor, puntaje, niveles, vidas, línea limitadora, velocidad y frecuencia del temblor |
 | `pruebas_audio.py` | Afinación del sintetizador; 18 215 notas generadas con los 4 motores, 5 niveles y 20 semillas, todas dentro de la escala y ancladas a los acordes; ritmo del mezclador |
 
 **Demostración del sonido** sin abrir el juego:
@@ -272,21 +325,33 @@ Tetris-Reto2/
 │   ├── config.py            #   todos los valores ajustables
 │   ├── piezas.py
 │   ├── tablero.py
-│   └── partida.py
+│   ├── partida.py
+│   └── pruebas_juego.py
 ├── interfaz/
 │   └── pantalla.py          # dibujo y teclado con curses
 ├── audio/                   # sonido procedural
 │   ├── sintetizador.py      #   formas de onda y envolventes
 │   ├── efectos.py
 │   ├── musica.py            #   composición con el motor
-│   └── reproductor.py       #   mezclador en tiempo real
+│   └── reproductor.py       #   mezclador en tiempo real (solo terminal)
+├── web/                     # interfaz gráfica para el navegador
+│   ├── index.html
+│   ├── estilos.css
+│   ├── app.js               #   dibujo, teclado y Web Audio
+│   ├── comun.js             #   carga de Pyodide y de los archivos .py
+│   ├── audio_worker.js      #   hilo de audio
+│   ├── puente.py            #   JavaScript ⇄ juego/partida.py
+│   └── puente_audio.py      #   JavaScript ⇄ audio/
+├── datos/
+│   └── ranking.json
+├── index.html               # redirige a web/ (GitHub Pages)
+├── .nojekyll                # para que GitHub Pages publique los __init__.py
 ├── pruebas_motores.py
-├── pruebas_juego.py
 ├── pruebas_audio.py
 └── demo_audio.py
 ```
 
-La lógica (`juego/`) no depende de la interfaz ni del audio: la partida solo anota eventos y la interfaz decide cómo mostrarlos y qué sonido reproducir. Eso permite probar todo sin abrir ninguna ventana.
+La lógica (`juego/`) no depende de la interfaz ni del audio: la partida solo anota eventos y la interfaz decide cómo mostrarlos y qué sonido reproducir. Eso permite probar todo sin abrir ninguna ventana, y es lo que hizo posible agregar la versión web sin modificar una sola línea de `juego/` ni de `motores/`.
 
 ---
 
@@ -302,6 +367,10 @@ La lógica (`juego/`) no depende de la interfaz ni del audio: la partida solo an
 | No suena aunque el panel muestra la música | Revisar que no esté silenciado con `M` y el volumen del sistema. Para forzar un reproductor: `TETRIS_AUDIO="aplay -q -t raw -f S16_LE -r 22050 -c 1" python3 main.py` |
 | Las flechas tardan en responder | Usar una terminal moderna; algunas terminales antiguas envían las flechas con retraso. |
 | La terminal queda desordenada tras un cierre forzado | Ejecutar `reset` (Linux). |
+| **Web:** "No se pudo cargar" al abrir `index.html` con doble clic | Usar un servidor local: `python3 -m http.server 8000` y abrir `http://localhost:8000/web/`. |
+| **Web:** se queda en "Descargando Python…" | Revisar la conexión a internet; la primera carga descarga Pyodide desde jsDelivr. |
+| **Web:** el juego carga en GitHub Pages pero falla al iniciar | Verificar que el archivo `.nojekyll` esté en la raíz del repositorio. |
+| **Web:** no suena | Los navegadores solo permiten sonido después de pulsar una tecla o hacer clic; elegir el motor ya lo activa. Revisar también que no esté silenciado con `M`. |
 
 ---
 

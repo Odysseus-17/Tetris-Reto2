@@ -2,6 +2,13 @@
 Pruebas de la lógica del juego, sin abrir la interfaz.
 Ejecutar:  python3 pruebas_juego.py
 """
+import os
+import sys
+
+# Este archivo vive en juego/: se agrega la raíz del proyecto al path para que
+# funcione tanto con "python3 juego/pruebas_juego.py" como con "python3 -m juego.pruebas_juego".
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from juego.partida import Partida
 from juego.piezas import Pieza, rotar, FORMAS
 
