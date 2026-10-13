@@ -94,6 +94,24 @@ La interfaz gráfica ejecuta **los mismos archivos Python** de `motores/`, `jueg
 - Componer la música tarda alrededor de un segundo en el navegador, así que el audio corre en un **Web Worker** (un hilo aparte) para que el juego no se congele, igual que el mezclador de la versión de terminal.
 - El sonido lo reproduce la Web Audio API del navegador, por eso funciona igual en Linux, Windows, macOS y celulares.
 
+### Modo 2 jugadores
+
+En el menú, la tecla **V** abre el modo de pantalla dividida para dos personas en el mismo teclado. Cada jugador elige su propio motor de números aleatorios y construye su torre; en el centro, dos torres de progreso muestran quién va más cerca de la meta.
+
+| | Jugador 1 | Jugador 2 |
+|---|---|---|
+| Mover | `A` `D` | `←` `→` |
+| Rotar | `W` | `↑` |
+| Bajar | `S` | `↓` |
+| Soltar | `Espacio` | `Enter` |
+| Cambiar motor | `1` `2` `3` `4` | `7` `8` `9` `0` |
+
+`T` activa el modo hardcore para los dos a la vez, `P` pausa, `M` silencia y `Esc` vuelve al menú.
+
+**Reglas:** gana quien llegue primero a **1000 puntos** (`META_VERSUS` en `juego/config.py`). Cada jugador conserva sus 5 vidas y su línea azul; si uno pierde todas sus vidas, gana el otro. La partida empieza con una cuenta regresiva de 3 segundos y al terminar se puede pedir la revancha con `R`.
+
+Las reglas están en `juego/versus.py`, que crea dos `Partida` normales y solo decide quién gana. Como el navegador solo repite la última tecla mantenida, la repetición de teclas de cada jugador se maneja en `web/versus.js`, para que los dos puedan mantener teclas al mismo tiempo.
+
 ### Jugar localmente
 
 El navegador no permite cargar los archivos `.py` abriendo `index.html` con doble clic (`file://`), así que se necesita un servidor local. Python ya trae uno:
@@ -312,6 +330,7 @@ Las pruebas no usan librerías externas ni necesitan abrir la interfaz.
 ```bash
 python3 pruebas_motores.py   # los cuatro generadores
 python3 juego/pruebas_juego.py   # lógica del Tetris, niveles, vidas, hardcore
+python3 juego/pruebas_versus.py  # modo 2 jugadores
 python3 pruebas_audio.py     # sintetizador, música y mezclador (no necesita parlantes)
 ```
 
@@ -320,6 +339,7 @@ En Windows, reemplazar `python3` por `py`.
 | Archivo | Qué verifica |
 |---|---|
 | `pruebas_motores.py` | PCG32, Xoshiro256** y SplitMix64 contra sus referencias; teorema de Hull-Dobell; degeneración del cuadrado medio; defecto de los bits bajos del LCG; distribución de 70 000 piezas por motor con prueba de **chi-cuadrado** |
+| `juego/pruebas_versus.py` | Partidas independientes, motor propio por jugador, victoria por meta y por vidas, que la torre del ganador no se borre |
 | `juego/pruebas_juego.py` | Rotación, colisiones, limpieza de líneas, aparición controlada por el motor, cambio de motor, puntaje, niveles, vidas, línea limitadora, velocidad y frecuencia del temblor |
 | `pruebas_audio.py` | Afinación del sintetizador; 18 215 notas generadas con los 4 motores, 5 niveles y 20 semillas, todas dentro de la escala y ancladas a los acordes; ritmo del mezclador |
 
@@ -348,7 +368,9 @@ Tetris-Reto2/
 │   ├── piezas.py
 │   ├── tablero.py
 │   ├── partida.py
-│   └── pruebas_juego.py
+│   ├── versus.py            #   modo 2 jugadores: decide quién gana
+│   ├── pruebas_juego.py
+│   └── pruebas_versus.py
 ├── interfaz/
 │   └── pantalla.py          # dibujo y teclado con curses
 ├── audio/                   # sonido procedural
@@ -360,6 +382,7 @@ Tetris-Reto2/
 │   ├── index.html
 │   ├── estilos.css
 │   ├── app.js               #   dibujo, teclado y Web Audio
+│   ├── versus.js            #   pantalla dividida para 2 jugadores
 │   ├── comun.js             #   carga de Pyodide y de los archivos .py
 │   ├── audio_worker.js      #   hilo de audio
 │   ├── puente.py            #   JavaScript ⇄ juego/partida.py

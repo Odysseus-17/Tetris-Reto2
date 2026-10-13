@@ -4,15 +4,21 @@ Puente entre la interfaz web (JavaScript) y la lógica del juego (Python).
 Cumple el mismo papel que interfaz/pantalla.py en la versión de terminal:
 no contiene reglas, solo traduce. JavaScript llama a estas funciones y
 recibe el estado como JSON para dibujarlo en el canvas.
+
+Modo 1 jugador: nueva(), gravedad(), accion(), estado().
+Modo 2 jugadores: nuevo_versus() y las mismas funciones con el número de
+jugador (0 o 1); las reglas de quién gana están en juego/versus.py.
 """
 import json
 
 from motores import MOTORES, CuadradoMedio
-from juego.config import VIDAS_INICIALES, METAS_NIVEL
+from juego.config import VIDAS_INICIALES
 from juego.partida import Partida
+from juego.versus import Versus
 from juego.piezas import FORMAS
 
-partida = None
+partida = None      # modo 1 jugador
+versus = None       # modo 2 jugadores
 
 
 def motores():
@@ -28,35 +34,69 @@ def gravedad():
     partida.paso_gravedad()
 
 
-def accion(nombre):
+def _aplicar(p, nombre):
     """Las mismas acciones que el teclado de la versión de terminal."""
-    if partida.terminada:
+    if p.terminada:
         return
     if nombre == "izquierda":
-        partida.mover(-1)
+        p.mover(-1)
     elif nombre == "derecha":
-        partida.mover(1)
+        p.mover(1)
     elif nombre == "rotar":
-        partida.rotar()
+        p.rotar()
     elif nombre == "bajar":
-        partida.bajar()
+        p.bajar()
     elif nombre == "soltar":
-        partida.caida_dura()
+        p.caida_dura()
     elif nombre == "hardcore":
-        partida.alternar_hardcore()
+        p.alternar_hardcore()
     elif nombre in MOTORES:
-        partida.cambiar_motor(nombre)
+        p.cambiar_motor(nombre)
+
+
+def accion(nombre):
+    _aplicar(partida, nombre)
 
 
 def estado():
-    p, m = partida, partida.motor
+    return json.dumps(_estado(partida))
+
+
+# ---------------- Modo 2 jugadores ----------------
+
+def nuevo_versus(motor_1, motor_2):
+    global versus
+    versus = Versus(motor_1, motor_2)
+
+
+def gravedad_jugador(i):
+    versus.jugadores[i].paso_gravedad()
+    versus.revisar()
+
+
+def accion_jugador(i, nombre):
+    _aplicar(versus.jugadores[i], nombre)
+    versus.revisar()
+
+
+def estado_versus():
+    return json.dumps({
+        "meta": versus.meta,
+        "ganador": versus.ganador,
+        "motivo": versus.motivo,
+        "jugadores": [_estado(p) for p in versus.jugadores],
+    })
+
+
+def _estado(p):
+    m = p.motor
     evento, p.evento = p.evento, None
     sonidos, p.sonidos = p.sonidos, []
     actual = fantasma = []
     if not p.terminada:
         actual = list(p.actual.celdas())
         fantasma = list(p.actual.celdas(fila=p.fila_fantasma()))
-    return json.dumps({
+    return {
         "tablero": p.tablero.celdas,
         "ancho": p.tablero.ancho,
         "alto": p.tablero.alto,
@@ -77,7 +117,7 @@ def estado():
             "sorteo_columna": p.ultimo_sorteo.get("columna", [None])[0],
         },
         "nivel": p.nivel,
-        "niveles": len(METAS_NIVEL),
+        "niveles": len(p.metas),
         "vidas": p.vidas,
         "vidas_max": VIDAS_INICIALES,
         "puntos": p.puntos,
@@ -95,4 +135,4 @@ def estado():
         "ganada": p.ganada,
         "evento": evento,
         "sonidos": sonidos,
-    })
+    }

@@ -19,3 +19,6 @@ INCREMENTO_VELOCIDAD = 0.05 # +5% por nivel: nivel 5 -> x1.20
 # Modo hardcore (tecla T): probabilidad (%) de que la pieza tiemble
 # una columna en cada paso de gravedad, según el nivel.
 PROBABILIDAD_TEMBLOR = (10, 15, 20, 25, 30)
+# Modo 2 jugadores: gana quien llegue primero a esta cantidad de puntos
+# (o el que siga en pie si el otro pierde todas sus vidas).
+META_VERSUS = 1000

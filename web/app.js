@@ -19,7 +19,7 @@ const $ = (id) => document.getElementById(id);
 
 let puente = null;           // módulo web/puente.py
 let estado = null;           // último estado recibido de Python
-let fase = "carga";          // carga | menu | juego
+let fase = "carga";          // carga | menu | juego | versus-config | versus
 let claveInicial = "3";
 let pausado = false;
 let ultimoPaso = 0;
@@ -206,6 +206,8 @@ function construirMenus() {
     };
     pestanas.appendChild(p);
   }
+  $("boton-versus").onclick = () => { audio.desbloquear(); versus.configurar(); };
+  versus.construir();
   $("boton-reiniciar").onclick = () => empezar(claveInicial);
   $("boton-menu").onclick = mostrarMenu;
   $("boton-hardcore").onclick = () => fase === "juego" && ejecutar("hardcore");
@@ -228,6 +230,7 @@ function construirMenus() {
 }
 
 function mostrarMenu() {
+  if (fase.startsWith("versus")) versus.salir();
   fase = "menu";
   estado = null;
   pausado = false;
@@ -297,9 +300,14 @@ function bucle(ahora) {
     ultimoPaso = ahora;
     refrescar();
   }
-  $("aviso").classList.toggle("visible",
-    fase === "juego" && !estado?.terminada && ahora < avisoHasta);
-  dibujar();
+  if (fase.startsWith("versus")) {
+    versus.tick(ahora);
+    versus.dibujar(ahora);
+  } else {
+    $("aviso").classList.toggle("visible",
+      fase === "juego" && !estado?.terminada && ahora < avisoHasta);
+    dibujar();
+  }
   requestAnimationFrame(bucle);
 }
 
@@ -316,6 +324,7 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const tecla = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(tecla)) e.preventDefault();
+  if (e.repeat && fase.startsWith("versus")) { e.preventDefault(); return; }
   if (fase === "carga") return;
   audio.desbloquear();
 
@@ -325,8 +334,11 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
+  if (fase.startsWith("versus")) return versus.teclado(e, tecla);
+
   if (fase === "menu") {
     if (listaMotores.some((m) => m.clave === tecla)) empezar(tecla);
+    else if (tecla === "v") versus.configurar();
     return;
   }
 
@@ -346,7 +358,15 @@ document.addEventListener("keydown", (e) => {
 });
 
 // Pausa automática si se cambia de pestaña o ventana
-window.addEventListener("blur", () => alternarPausa(true));
+window.addEventListener("blur", () => {
+  if (fase === "versus") versus.pausar(true);
+  else alternarPausa(true);
+});
+
+document.addEventListener("keyup", (e) => {
+  const tecla = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  versus.soltarTecla(tecla);
+});
 
 // ====================================================================
 // Panel lateral
@@ -403,22 +423,27 @@ function actualizarSonido() {
 }
 
 // ====================================================================
-// Dibujo del tablero en el canvas
+// Dibujo del tablero en el canvas. Estas funciones reciben el canvas y el
+// estado como parámetros: las usa también la pantalla dividida (versus.js).
 // ====================================================================
 
 const lienzo = $("tablero");
-const ctx = lienzo.getContext("2d");
 const lienzoSig = $("siguiente");
-const ctxSig = lienzoSig.getContext("2d");
+
+// Ajusta la resolución interna del canvas a su tamaño en pantalla
+function ajustarCanvas(c) {
+  const escala = window.devicePixelRatio || 1;
+  const r = c.getBoundingClientRect();
+  if (!r.width) return;
+  c.width = Math.round(r.width * escala);
+  c.height = Math.round(r.height * escala);
+  c.getContext("2d").setTransform(c.width / r.width, 0, 0, c.height / r.height, 0, 0);
+}
 
 function prepararCanvas() {
-  const escala = window.devicePixelRatio || 1;
-  for (const [c, x] of [[lienzo, ctx], [lienzoSig, ctxSig]]) {
-    const r = c.getBoundingClientRect();
-    c.width = Math.round(r.width * escala);
-    c.height = Math.round(r.height * escala);
-    x.setTransform(c.width / r.width, 0, 0, c.height / r.height, 0, 0);
-  }
+  ajustarCanvas(lienzo);
+  ajustarCanvas(lienzoSig);
+  versus.prepararCanvas();
 }
 window.addEventListener("resize", () => { prepararCanvas(); dibujar(); });
 
@@ -426,17 +451,24 @@ function bloque(x, cx, cy, tam, color) {
   x.fillStyle = color;
   x.fillRect(cx + 1, cy + 1, tam - 2, tam - 2);
   // Relieve: brillo arriba a la izquierda y sombra abajo a la derecha
+  const borde = Math.max(2, Math.round(tam / 10));
   x.fillStyle = "rgba(255,255,255,.28)";
-  x.fillRect(cx + 1, cy + 1, tam - 2, 3);
-  x.fillRect(cx + 1, cy + 1, 3, tam - 2);
+  x.fillRect(cx + 1, cy + 1, tam - 2, borde);
+  x.fillRect(cx + 1, cy + 1, borde, tam - 2);
   x.fillStyle = "rgba(0,0,0,.25)";
-  x.fillRect(cx + 1, cy + tam - 4, tam - 2, 3);
-  x.fillRect(cx + tam - 4, cy + 1, 3, tam - 2);
+  x.fillRect(cx + 1, cy + tam - 1 - borde, tam - 2, borde);
+  x.fillRect(cx + tam - 1 - borde, cy + 1, borde, tam - 2);
 }
 
 function dibujar() {
-  const ancho = estado?.ancho ?? 10, alto = estado?.alto ?? 20;
-  const r = lienzo.getBoundingClientRect();
+  dibujarTablero(lienzo, estado);
+  dibujarSiguiente(lienzoSig, estado?.siguiente);
+}
+
+function dibujarTablero(canvas, est) {
+  const ctx = canvas.getContext("2d");
+  const ancho = est?.ancho ?? 10, alto = est?.alto ?? 20;
+  const r = canvas.getBoundingClientRect();
   const t = r.width / ancho;
   ctx.clearRect(0, 0, r.width, r.height);
 
@@ -451,10 +483,10 @@ function dibujar() {
   for (let f = 1; f < alto; f++) {
     ctx.beginPath(); ctx.moveTo(0, f * t + .5); ctx.lineTo(r.width, f * t + .5); ctx.stroke();
   }
-  if (!estado) { dibujarSiguiente(null); return; }
+  if (!est) return;
 
   // Zona prohibida por encima de la línea limitadora
-  const limite = estado.fila_limite;
+  const limite = est.fila_limite;
   if (limite > 0) {
     ctx.save();
     ctx.beginPath();
@@ -470,19 +502,19 @@ function dibujar() {
   }
 
   // Bloques fijos
-  estado.tablero.forEach((fila, f) => fila.forEach((tipo, c) => {
+  est.tablero.forEach((fila, f) => fila.forEach((tipo, c) => {
     if (tipo) bloque(ctx, c * t, f * t, t, COLORES[tipo]);
   }));
 
-  if (!estado.terminada) {
+  if (!est.terminada) {
     // Sombra: dónde caería la pieza
-    const color = COLORES[estado.pieza.tipo];
+    const color = COLORES[est.pieza.tipo];
     ctx.strokeStyle = color;
     ctx.globalAlpha = .45;
     ctx.lineWidth = 2;
-    for (const [f, c] of estado.fantasma) ctx.strokeRect(c * t + 3, f * t + 3, t - 6, t - 6);
+    for (const [f, c] of est.fantasma) ctx.strokeRect(c * t + 3, f * t + 3, t - 6, t - 6);
     ctx.globalAlpha = 1;
-    for (const [f, c] of estado.pieza.celdas) bloque(ctx, c * t, f * t, t, color);
+    for (const [f, c] of est.pieza.celdas) bloque(ctx, c * t, f * t, t, color);
   }
 
   // Línea limitadora azul
@@ -494,19 +526,17 @@ function dibujar() {
     ctx.fillRect(0, limite * t - 2, r.width, 4);
     ctx.restore();
   }
-
-  dibujarSiguiente(estado.siguiente);
 }
 
-function dibujarSiguiente(sig) {
-  const r = lienzoSig.getBoundingClientRect();
-  ctxSig.clearRect(0, 0, r.width, r.height);
+function dibujarSiguiente(canvas, sig, t = 22) {
+  const ctx = canvas.getContext("2d");
+  const r = canvas.getBoundingClientRect();
+  ctx.clearRect(0, 0, r.width, r.height);
   if (!sig) return;
-  const t = 22;
   const filas = sig.forma.length, cols = sig.forma[0].length;
   const x0 = (r.width - cols * t) / 2, y0 = (r.height - filas * t) / 2;
   sig.forma.forEach((fila, f) => fila.forEach((v, c) => {
-    if (v) bloque(ctxSig, x0 + c * t, y0 + f * t, t, COLORES[sig.tipo]);
+    if (v) bloque(ctx, x0 + c * t, y0 + f * t, t, COLORES[sig.tipo]);
   }));
 }
 

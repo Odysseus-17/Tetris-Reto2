@@ -10,7 +10,7 @@ const ARCHIVOS_JUEGO = [
   "motores/__init__.py", "motores/base.py", "motores/cuadrado_medio.py",
   "motores/congruencial.py", "motores/pcg.py", "motores/xoshiro.py",
   "juego/__init__.py", "juego/config.py", "juego/piezas.py",
-  "juego/tablero.py", "juego/partida.py",
+  "juego/tablero.py", "juego/partida.py", "juego/versus.py",
   "web/puente.py",
 ];
 const ARCHIVOS_AUDIO = [

@@ -11,7 +11,7 @@ services:
     buildCommand: >-
       rm -rf public && mkdir -p public &&
       cp -r web motores juego audio public/ &&
-      rm -f public/juego/pruebas_juego.py public/audio/reproductor.py &&
+      rm -f public/juego/pruebas_*.py public/audio/reproductor.py &&
       find public -name "__pycache__" -prune -exec rm -rf {} +
     staticPublishPath: ./public
     routes:

@@ -16,7 +16,7 @@
     <p>Todo el azar sale de generadores de números implementados a mano. Cambia de motor en plena partida y compara.</p>
   </header>
 
-  <main class="juego">
+  <main class="juego" id="modo-1">
     <section class="zona-tablero">
       <div class="marco">
         <canvas id="tablero" aria-label="Tablero de juego"></canvas>
@@ -31,6 +31,9 @@
           <h2>Elige el motor</h2>
           <div id="opciones-menu" class="opciones"></div>
           <small id="ayuda-menu">Teclas 1–4 · o haz clic</small>
+          <button id="boton-versus" class="boton-versus" tabindex="-1">
+            <kbd>V</kbd>2 jugadores <span>pantalla dividida</span>
+          </button>
         </div>
 
         <div id="capa-fin" class="capa">
@@ -120,7 +123,55 @@
     </aside>
   </main>
 
+  <main class="versus" id="modo-2" hidden>
+    <section class="vs-jugador vs-j0" id="vs-j0"></section>
+
+    <section class="vs-centro" aria-label="Carrera hacia la meta">
+      <div class="vs-bandera">META<b id="vs-meta">1000</b></div>
+      <div class="vs-torres">
+        <div class="vs-torre" data-j="0"><div class="vs-relleno"></div></div>
+        <div class="vs-torre" data-j="1"><div class="vs-relleno"></div></div>
+      </div>
+      <div class="vs-etiquetas"><span>J1</span><span>J2</span></div>
+      <p id="vs-hardcore" class="vs-hardcore"></p>
+      <p id="vs-musica" class="vs-nota"></p>
+      <p class="vs-nota"><kbd>T</kbd> hardcore<br><kbd>M</kbd> sonido<br><kbd>P</kbd> pausa<br><kbd>Esc</kbd> menú</p>
+    </section>
+
+    <section class="vs-jugador vs-j1" id="vs-j1"></section>
+
+    <div id="vs-capa-config" class="vs-capa">
+      <h2>2 jugadores</h2>
+      <p>Cada jugador elige su motor de números aleatorios.<br>Gana quien llegue primero a <b>1000 puntos</b>, o el que siga en pie si el otro pierde sus 5 vidas.</p>
+      <div class="vs-config">
+        <div><h3 class="vs-color-j1">Jugador 1</h3><div id="vs-opciones-0" class="opciones"></div><small>Mueve con W A S D, suelta con Espacio</small></div>
+        <div><h3 class="vs-color-j2">Jugador 2</h3><div id="vs-opciones-1" class="opciones"></div><small>Mueve con las flechas, suelta con Enter</small></div>
+      </div>
+      <div class="botones">
+        <button id="vs-boton-empezar" tabindex="-1"><kbd>Enter</kbd>Empezar</button>
+      </div>
+      <small>Esc para volver al menú</small>
+    </div>
+    <div id="vs-capa-cuenta" class="vs-capa vs-capa-ligera"><b id="vs-cuenta" class="vs-cuenta">3</b></div>
+    <div id="vs-capa-pausa" class="vs-capa"><h2>PAUSA</h2><small>P para continuar</small></div>
+    <div id="vs-capa-fin" class="vs-capa vs-capa-ligera">
+      <div class="vs-tarjeta-fin">
+      <h2 id="vs-titulo-fin">¡Gana el Jugador 1!</h2>
+      <p id="vs-motivo-fin"></p>
+      <dl class="resumen">
+        <dt class="vs-color-j1">Jugador 1</dt><dd id="vs-fin-j0"></dd>
+        <dt class="vs-color-j2">Jugador 2</dt><dd id="vs-fin-j1"></dd>
+      </dl>
+      <div class="botones">
+        <button id="vs-boton-revancha" tabindex="-1"><kbd>R</kbd>Revancha</button>
+        <button id="vs-boton-menu" tabindex="-1" class="secundario"><kbd>Esc</kbd>Menú</button>
+      </div>
+      </div>
+    </div>
+  </main>
+
   <script src="comun.js"></script>
+  <script src="versus.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

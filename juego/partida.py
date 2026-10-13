@@ -20,7 +20,10 @@ DESPLAZAMIENTOS_ROTACION = (0, -1, 1, -2, 2)
 
 
 class Partida:
-    def __init__(self, clave_motor="3", semilla=None, ancho=10, alto=20):
+    def __init__(self, clave_motor="3", semilla=None, ancho=10, alto=20,
+                 metas=METAS_NIVEL):
+        # Puntos para pasar cada nivel. El modo 2 jugadores usa una sola meta.
+        self.metas = tuple(metas)
         self.tablero = Tablero(ancho, alto)
         self.lineas = 0
         self.piezas_colocadas = 0
@@ -56,7 +59,7 @@ class Partida:
 
     @property
     def meta_actual(self):
-        return METAS_NIVEL[self.nivel - 1]
+        return self.metas[self.nivel - 1]
 
     @property
     def progreso(self):
@@ -157,7 +160,7 @@ class Partida:
         self.puntos += ganados
         self.puntos_nivel += ganados
         if self.puntos_nivel >= self.meta_actual:
-            if self.nivel == len(METAS_NIVEL):
+            if self.nivel == len(self.metas):
                 self.ganada = True
                 self.terminada = True
                 self.sonidos.append("victoria")
