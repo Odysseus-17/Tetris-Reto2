@@ -112,6 +112,28 @@ Y abrir **http://localhost:8000/web/**. La primera carga descarga Pyodide (unos 
 
 El archivo `.nojekyll` es necesario: sin él, GitHub Pages ignora los archivos que empiezan con guion bajo, como `__init__.py`, y el juego no carga. El `index.html` de la raíz solo redirige a `web/`.
 
+### Publicar en Render
+
+El repositorio incluye `render.yaml`, así que Render lee la configuración solo. Se publica como **sitio estático**: es gratis y, a diferencia de los servicios web del plan gratuito, no se suspende por inactividad.
+
+1. Crear una cuenta en [render.com](https://render.com) e iniciar sesión con GitHub.
+2. **New → Blueprint**, elegir este repositorio y confirmar con **Apply**.
+3. Al terminar, el juego queda en `https://tetris-reto2.onrender.com` (si el nombre está ocupado, Render agrega un sufijo).
+
+Cada `git push` a `main` vuelve a publicar el sitio automáticamente.
+
+Si se prefiere configurarlo a mano: **New → Static Site**, elegir el repositorio y llenar:
+
+| Campo | Valor |
+|---|---|
+| Branch | `main` |
+| Build Command | `mkdir -p public && cp -r web motores juego audio public/` |
+| Publish Directory | `public` |
+
+y en **Redirects/Rewrites** agregar una regla *Redirect* de `/` a `/web/`.
+
+El comando de compilación copia a `public/` solo lo que usa la versión web (la interfaz y los `.py` del juego), así no se publican las pruebas ni los audios de demostración.
+
 ### Requisitos
 
 Un navegador actual (Chrome, Edge, Firefox o Safari) con JavaScript y WebAssembly. Funciona con teclado en el computador y con botones táctiles en el celular.
@@ -346,6 +368,7 @@ Tetris-Reto2/
 │   └── ranking.json
 ├── index.html               # redirige a web/ (GitHub Pages)
 ├── .nojekyll                # para que GitHub Pages publique los __init__.py
+├── render.yaml              # despliegue en Render (sitio estático)
 ├── pruebas_motores.py
 ├── pruebas_audio.py
 └── demo_audio.py
