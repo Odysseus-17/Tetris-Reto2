@@ -4,7 +4,7 @@ Tetris para el navegador en el que **todo lo aleatorio lo deciden generadores de
 
 La lógica está escrita en Python y se ejecuta **dentro del navegador** con [Pyodide](https://pyodide.org) (Python compilado a WebAssembly): no hay servidor que procese el juego y el sonido funciona igual en cualquier sistema operativo.
 
-**▶ Jugar en línea:** https://tetris-reto2.onrender.com
+**▶ Jugar en línea:** https://tetris-reto2-lldk.onrender.com/web/
 
 ---
 
