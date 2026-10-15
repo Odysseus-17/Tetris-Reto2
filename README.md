@@ -45,6 +45,7 @@ Tiene **dos interfaces que comparten exactamente la misma lógica en Python**:
 - [Motores de números aleatorios](#motores-de-números-aleatorios)
 - [Qué controla el azar en el juego](#qué-controla-el-azar-en-el-juego)
 - [Reglas del juego](#reglas-del-juego)
+- [Tabla de puntuaciones](#tabla-de-puntuaciones)
 - [Sonido procedural](#sonido-procedural)
 - [Pruebas](#pruebas)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -235,6 +236,7 @@ python3 main.py
 | `M` | Silenciar o activar el sonido |
 | `P` | Pausa |
 | `R` | Reiniciar (en la pantalla de fin del juego) |
+| `L` | Ver la tabla de puntuaciones (en el menú) |
 | `Q` | Salir |
 
 El dispositivo de entrada es el **teclado**.
@@ -304,6 +306,25 @@ Se pierde una vida cuando una pieza queda fija con algún bloque por encima de l
 
 ---
 
+## Tabla de puntuaciones
+
+Solo en el modo de 1 jugador; el modo 2 jugadores no la usa.
+
+1. Después de elegir el motor, el juego pregunta el nombre del jugador (hasta 16 caracteres). La revancha con `R` usa el mismo nombre.
+2. Al terminar la partida, por perder todas las vidas o por ganar, se registra una fila con **nombre, nivel alcanzado y puntos acumulados** de la partida, además del motor usado y la fecha.
+3. La pantalla final muestra la tabla con la partida recién jugada resaltada y el puesto obtenido. Desde el menú, la tecla `L` la muestra en cualquier momento.
+
+La tabla guarda las **10 mejores partidas**, ordenadas por puntos; si empatan, gana el que llegó a un nivel mayor, y si también empatan, quien lo logró primero conserva el puesto. Un mismo nombre puede aparecer varias veces, una por partida. Salir con `Q` a mitad de una partida no la registra.
+
+La lógica está en `juego/ranking.py` y es la misma para las dos interfaces; solo cambia dónde se guarda:
+
+| Versión | Dónde se guarda | Alcance |
+|---|---|---|
+| Terminal | `datos/ranking.json` | En ese computador, para cualquiera que juegue desde esa carpeta |
+| Web | Almacenamiento del navegador (`localStorage`) | En ese navegador y computador. Se pierde si se borran los datos del sitio |
+
+La versión web no tiene servidor, así que cada navegador tiene su propia tabla. Una tabla compartida entre todos los jugadores del enlace necesitaría un servidor con base de datos.
+
 ## Sonido procedural
 
 Ningún sonido viene de un archivo: todos se **calculan** muestra por muestra (22 050 por segundo) con ondas senoidales, cuadradas y triangulares, usando solo `math`, `array` y `wave` de la librería estándar.
@@ -331,6 +352,7 @@ Las pruebas no usan librerías externas ni necesitan abrir la interfaz.
 python3 pruebas_motores.py   # los cuatro generadores
 python3 juego/pruebas_juego.py   # lógica del Tetris, niveles, vidas, hardcore
 python3 juego/pruebas_versus.py  # modo 2 jugadores
+python3 juego/pruebas_ranking.py # tabla de puntuaciones
 python3 pruebas_audio.py     # sintetizador, música y mezclador (no necesita parlantes)
 ```
 
@@ -339,6 +361,7 @@ En Windows, reemplazar `python3` por `py`.
 | Archivo | Qué verifica |
 |---|---|
 | `pruebas_motores.py` | PCG32, Xoshiro256** y SplitMix64 contra sus referencias; teorema de Hull-Dobell; degeneración del cuadrado medio; defecto de los bits bajos del LCG; distribución de 70 000 piezas por motor con prueba de **chi-cuadrado** |
+| `juego/pruebas_ranking.py` | Limpieza de nombres, orden y desempates, límite de 10 partidas, archivo vacío o dañado, persistencia en disco |
 | `juego/pruebas_versus.py` | Partidas independientes, motor propio por jugador, victoria por meta y por vidas, que la torre del ganador no se borre |
 | `juego/pruebas_juego.py` | Rotación, colisiones, limpieza de líneas, aparición controlada por el motor, cambio de motor, puntaje, niveles, vidas, línea limitadora, velocidad y frecuencia del temblor |
 | `pruebas_audio.py` | Afinación del sintetizador; 18 215 notas generadas con los 4 motores, 5 niveles y 20 semillas, todas dentro de la escala y ancladas a los acordes; ritmo del mezclador |
@@ -369,6 +392,7 @@ Tetris-Reto2/
 │   ├── tablero.py
 │   ├── partida.py
 │   ├── versus.py            #   modo 2 jugadores: decide quién gana
+│   ├── ranking.py           #   tabla de puntuaciones (1 jugador)
 │   ├── pruebas_juego.py
 │   └── pruebas_versus.py
 ├── interfaz/
@@ -388,7 +412,7 @@ Tetris-Reto2/
 │   ├── puente.py            #   JavaScript ⇄ juego/partida.py
 │   └── puente_audio.py      #   JavaScript ⇄ audio/
 ├── datos/
-│   └── ranking.json
+│   └── ranking.json         # tabla de puntuaciones de la versión de terminal
 ├── index.html               # redirige a web/ (GitHub Pages)
 ├── .nojekyll                # para que GitHub Pages publique los __init__.py
 ├── render.yaml              # despliegue en Render (sitio estático)

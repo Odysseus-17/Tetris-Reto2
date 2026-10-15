@@ -31,17 +31,42 @@
           <h2>Elige el motor</h2>
           <div id="opciones-menu" class="opciones"></div>
           <small id="ayuda-menu">Teclas 1–4 · o haz clic</small>
+          <button id="boton-ranking" class="boton-ranking" tabindex="-1">
+            <kbd>L</kbd>Tabla de puntuaciones
+          </button>
           <button id="boton-versus" class="boton-versus" tabindex="-1">
             <kbd>V</kbd>2 jugadores <span>pantalla dividida</span>
           </button>
         </div>
 
+        <div id="capa-nombre" class="capa">
+          <h2>¿Quién juega?</h2>
+          <form id="form-nombre" class="form-nombre" autocomplete="off">
+            <label for="campo-nombre">Tu nombre para la tabla de puntuaciones</label>
+            <input id="campo-nombre" type="text" spellcheck="false" placeholder="Nombre">
+            <small>Motor: <b id="nombre-motor">—</b></small>
+            <div class="botones">
+              <button type="submit" tabindex="-1"><kbd>Enter</kbd>Jugar</button>
+              <button type="button" id="boton-nombre-volver" tabindex="-1" class="secundario"><kbd>Esc</kbd>Volver</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="capa-ranking" class="capa">
+          <h2>Puntuaciones</h2>
+          <div id="tabla-ranking" class="tabla-ranking"></div>
+          <small id="nota-ranking">Se guarda en este navegador · L o Esc para volver</small>
+        </div>
+
         <div id="capa-fin" class="capa">
           <h2 id="titulo-fin">FIN DEL JUEGO</h2>
           <dl class="resumen">
+            <dt>Jugador</dt><dd id="fin-nombre">—</dd>
             <dt>Puntos</dt><dd id="fin-puntos">0</dd>
             <dt>Nivel</dt><dd id="fin-nivel">1</dd>
           </dl>
+          <p id="fin-puesto" class="fin-puesto"></p>
+          <div id="fin-tabla" class="tabla-ranking"></div>
           <div class="botones">
             <button id="boton-reiniciar" tabindex="-1">R · Reiniciar</button>
             <button id="boton-menu" tabindex="-1" class="secundario">Q · Menú</button>
@@ -86,6 +111,7 @@
       </div>
 
       <div class="tarjeta">
+        <p class="dato jugador-actual">Jugador <b id="nombre-jugador">—</b></p>
         <div class="fila-nivel">
           <h3>Nivel <b id="nivel">1</b><span id="niveles">/5</span></h3>
           <div id="vidas" class="vidas" aria-label="Vidas"></div>

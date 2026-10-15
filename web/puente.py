@@ -15,6 +15,8 @@ from motores import MOTORES, CuadradoMedio
 from juego.config import VIDAS_INICIALES
 from juego.partida import Partida
 from juego.versus import Versus
+from juego.ranking import Ranking, limpiar_nombre
+from juego.config import LARGO_NOMBRE
 from juego.piezas import FORMAS
 
 partida = None      # modo 1 jugador
@@ -60,6 +62,31 @@ def accion(nombre):
 
 def estado():
     return json.dumps(_estado(partida))
+
+
+# ---------------- Tabla de puntuaciones (solo 1 jugador) ----------------
+# JavaScript guarda el JSON en el navegador (localStorage); la lógica de
+# ordenar e insertar es la misma de la versión de terminal (juego/ranking.py).
+
+def ranking_ordenar(texto):
+    return Ranking.desde_json(texto).a_json()
+
+
+def ranking_registrar(texto, nombre, fecha):
+    """Agrega la partida que acaba de terminar. Devuelve el JSON actualizado
+    y el puesto obtenido (o null si no entró en la tabla)."""
+    r = Ranking.desde_json(texto)
+    p = partida
+    puesto = r.agregar(nombre, p.puntos, p.nivel, p.motor.nombre, fecha)
+    return json.dumps({"tabla": r.a_json(), "puesto": puesto})
+
+
+def nombre_valido(nombre):
+    return limpiar_nombre(nombre)
+
+
+def largo_nombre():
+    return LARGO_NOMBRE
 
 
 # ---------------- Modo 2 jugadores ----------------

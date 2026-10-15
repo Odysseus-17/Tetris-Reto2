@@ -3,11 +3,14 @@ Todo el dibujo y la lectura de teclado con curses.
 La lógica del juego está en juego/partida.py; aquí solo se muestra.
 """
 import curses
+import datetime
 import time
+from pathlib import Path
 
 from motores import MOTORES, CuadradoMedio
-from juego.config import VIDAS_INICIALES, METAS_NIVEL
+from juego.config import VIDAS_INICIALES, METAS_NIVEL, LARGO_NOMBRE
 from juego.partida import Partida
+from juego.ranking import cargar_archivo, guardar_archivo, limpiar_nombre
 from juego.piezas import FORMAS, ORDEN
 from audio.reproductor import Audio
 
@@ -15,6 +18,8 @@ FILAS_MIN, COLUMNAS_MIN = 24, 64
 TICK_MS = 30
 DURACION_AVISO = 1.5     # segundos que se muestra "¡Nivel 2!" o "Perdiste una vida"
 ANCHO_BARRA = 20
+# La tabla de puntuaciones de la versión de terminal vive en datos/ranking.json
+RUTA_RANKING = Path(__file__).resolve().parent.parent / "datos" / "ranking.json"
 
 COLORES = {
     "I": curses.COLOR_CYAN, "O": curses.COLOR_YELLOW, "T": curses.COLOR_MAGENTA,
@@ -174,12 +179,47 @@ def dibujar_aviso(win, texto, y0, x0):
     escribir(win, y0 + 9, x0 + 2, f" {texto:^16} ", curses.A_REVERSE | curses.A_BOLD)
 
 
-def dibujar_fin(win, partida, y0, x0):
+def dibujar_fin(win, partida, nombre, resultado, y0, x0):
     titulo = "¡GANASTE!" if partida.ganada else "FIN DEL JUEGO"
-    lineas = [f"{titulo:^16}", f"Puntos: {partida.puntos:<8}",
-              f"Nivel:  {partida.nivel:<8}", "r: reiniciar    ", "q: salir        "]
+    puesto = resultado["puesto"]
+    if resultado["error"]:
+        texto_puesto = "No se guardó"
+    else:
+        texto_puesto = f"Puesto {puesto}" if puesto else "Fuera del top"
+    lineas = [f"{titulo:^16}", f"{nombre[:16]:^16}", f"Puntos: {partida.puntos:<8}",
+              f"Nivel:  {partida.nivel:<8}", f"{texto_puesto:^16}",
+              "r: reiniciar    ", "q: menú         "]
     for i, texto in enumerate(lineas):
-        escribir(win, y0 + 7 + i, x0 + 2, f" {texto} ", curses.A_REVERSE | curses.A_BOLD)
+        escribir(win, y0 + 6 + i, x0 + 2, f" {texto} ", curses.A_REVERSE | curses.A_BOLD)
+
+
+def dibujar_tabla(win, filas, y0, x0, resaltar=None):
+    """Tabla de puntuaciones: #, nombre, nivel y puntos."""
+    escribir(win, y0, x0, "TABLA DE PUNTUACIONES", curses.A_BOLD)
+    if not filas:
+        escribir(win, y0 + 2, x0, "Todavía no hay partidas.", curses.A_DIM)
+        return
+    escribir(win, y0 + 2, x0, f" #  {'Nombre':<{LARGO_NOMBRE}}  Nv  Puntos", curses.A_DIM)
+    for i, f in enumerate(filas, start=1):
+        texto = f"{i:>2}  {f['nombre']:<{LARGO_NOMBRE}}  {f['nivel']:>2}  {f['puntos']:>6}"
+        attr = curses.A_REVERSE | curses.A_BOLD if i == resaltar else 0
+        escribir(win, y0 + 2 + i, x0, texto, attr)
+    escribir(win, y0 + 4 + len(filas), x0, f"Guardada en datos/{RUTA_RANKING.name}", curses.A_DIM)
+
+
+def registrar_resultado(partida, nombre):
+    """Agrega la partida terminada al archivo y devuelve lo que hay que mostrar."""
+    resultado = {"puesto": None, "filas": [], "error": False}
+    ranking = cargar_archivo(RUTA_RANKING)
+    resultado["puesto"] = ranking.agregar(nombre, partida.puntos, partida.nivel,
+                                          partida.motor.nombre,
+                                          datetime.date.today().isoformat())
+    resultado["filas"] = ranking.filas
+    try:
+        guardar_archivo(RUTA_RANKING, ranking)
+    except OSError:
+        resultado["error"] = True       # p. ej. carpeta de solo lectura: se muestra igual
+    return resultado
 
 
 def pantalla_pequena(win):
@@ -203,18 +243,60 @@ def menu(win):
         fila = 6 + len(MOTORES) + 1
         escribir(win, fila, 4, "En la partida: 1-4 cambian el motor,", curses.A_DIM)
         escribir(win, fila + 1, 4, "t activa el modo hardcore y m silencia el sonido.", curses.A_DIM)
-        escribir(win, fila + 3, 4, "q para salir", curses.A_DIM)
+        escribir(win, fila + 3, 4, "l ver la tabla de puntuaciones", curses.A_DIM)
+        escribir(win, fila + 4, 4, "q para salir", curses.A_DIM)
         win.refresh()
         tecla = win.getch()
         if tecla == ord("q"):
             return None
-        if tecla != -1 and chr(tecla) in MOTORES:
+        if tecla == ord("l"):
+            ver_ranking(win)
+        elif tecla != -1 and chr(tecla) in MOTORES:
             return chr(tecla)
 
 
-def jugar(win, clave_motor, audio):
+def ver_ranking(win):
+    filas = cargar_archivo(RUTA_RANKING).filas
+    while True:
+        win.erase()
+        dibujar_tabla(win, filas, 2, 4)
+        escribir(win, 2 + len(filas) + 6, 4, "cualquier tecla para volver", curses.A_DIM)
+        win.refresh()
+        if win.getch() != -1:
+            return
+
+
+def pedir_nombre(win, clave_motor, anterior):
+    """Pide el nombre antes de la partida. Devuelve el nombre, o None si el
+    jugador presiona Esc para volver al menú. Usa get_wch para aceptar tildes."""
+    texto = anterior
+    while True:
+        win.erase()
+        escribir(win, 2, 4, "T E T R I S   —   Reto 2", curses.A_BOLD)
+        escribir(win, 4, 4, f"Motor: {MOTORES[clave_motor].nombre}")
+        escribir(win, 6, 4, "¿Quién juega? Tu nombre para la tabla de puntuaciones:")
+        escribir(win, 8, 6, f" {texto:<{LARGO_NOMBRE}} ", curses.A_REVERSE)
+        escribir(win, 8, 7 + len(texto), "_" if len(texto) < LARGO_NOMBRE else "", curses.A_REVERSE | curses.A_BLINK)
+        escribir(win, 10, 4, "Enter para jugar · Esc para volver", curses.A_DIM)
+        win.refresh()
+        try:
+            tecla = win.get_wch()
+        except curses.error:            # no se presionó nada en este ciclo
+            continue
+        if tecla in ("\n", "\r", curses.KEY_ENTER):
+            return limpiar_nombre(texto)
+        if tecla == "\x1b":
+            return None
+        if tecla in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+            texto = texto[:-1]
+        elif isinstance(tecla, str) and tecla.isprintable() and len(texto) < LARGO_NOMBRE:
+            texto += tecla
+
+
+def jugar(win, clave_motor, audio, nombre):
     """Devuelve True si el jugador pide reiniciar, False si sale."""
     partida = Partida(clave_motor)
+    resultado = None                    # se llena una sola vez, al terminar
     ultimo_paso = time.monotonic()
     pausado = False
     audio.pausado = False
@@ -234,11 +316,13 @@ def jugar(win, clave_motor, audio):
             ultimo_paso = ahora
 
         # Sonido: efectos pendientes y música según motor y nivel
-        for nombre in partida.sonidos:
-            audio.efecto(nombre)
+        for sonido in partida.sonidos:
+            audio.efecto(sonido)
         partida.sonidos.clear()
         if partida.terminada:
             audio.detener_musica()
+            if resultado is None:
+                resultado = registrar_resultado(partida, nombre)
         else:
             audio.musica_para(type(partida.motor), partida.motor.semilla_inicial, partida.nivel)
 
@@ -250,10 +334,13 @@ def jugar(win, clave_motor, audio):
         x_panel = 2 + partida.tablero.ancho * 2 + 5
         win.erase()
         dibujar_tablero(win, partida, 1, 2)
-        dibujar_panel(win, partida, 1, x_panel, pausado, audio)
         if partida.terminada:
-            dibujar_fin(win, partida, 1, 2)
-        elif aviso and ahora < aviso_hasta:
+            # Al terminar, el panel lateral muestra la tabla de puntuaciones
+            dibujar_fin(win, partida, nombre, resultado, 1, 2)
+            dibujar_tabla(win, resultado["filas"], 2, x_panel, resultado["puesto"])
+        else:
+            dibujar_panel(win, partida, 1, x_panel, pausado, audio)
+        if not partida.terminada and aviso and ahora < aviso_hasta:
             dibujar_aviso(win, aviso, 1, 2)
         win.refresh()
 
@@ -300,12 +387,17 @@ def principal(win):
     win.keypad(True)
     win.timeout(TICK_MS)   # getch() espera como máximo 30 ms: el juego no se congela
     audio = Audio()
+    nombre = ""
     try:
         while True:
             clave = menu(win)
             if clave is None:
                 return
-            while jugar(win, clave, audio):
+            nombre = pedir_nombre(win, clave, nombre)
+            if nombre is None:          # Esc: volver al menú
+                nombre = ""
+                continue
+            while jugar(win, clave, audio, nombre):   # la revancha (r) usa el mismo nombre
                 pass
             audio.detener_musica()
     finally:

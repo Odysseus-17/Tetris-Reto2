@@ -22,3 +22,7 @@ PROBABILIDAD_TEMBLOR = (10, 15, 20, 25, 30)
 # Modo 2 jugadores: gana quien llegue primero a esta cantidad de puntos
 # (o el que siga en pie si el otro pierde todas sus vidas).
 META_VERSUS = 1000
+
+# Tabla de puntuaciones (solo modo 1 jugador)
+RANKING_MAXIMO = 10         # cuántas partidas guarda la tabla
+LARGO_NOMBRE = 16           # caracteres máximos del nombre del jugador

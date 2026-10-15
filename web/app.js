@@ -19,8 +19,10 @@ const $ = (id) => document.getElementById(id);
 
 let puente = null;           // módulo web/puente.py
 let estado = null;           // último estado recibido de Python
-let fase = "carga";          // carga | menu | juego | versus-config | versus
+let fase = "carga";          // carga | menu | nombre | ranking | juego | versus-config | versus
 let claveInicial = "3";
+let nombreJugador = "";      // quién juega la partida de 1 jugador
+let resultadoGuardado = false;
 let pausado = false;
 let ultimoPaso = 0;
 let avisoHasta = 0;
@@ -161,7 +163,7 @@ async function iniciar() {
     puente = py.pyimport("puente");
     // Si el navegador mezcló archivos de dos versiones distintas, avisar en
     // vez de fallar en silencio más adelante.
-    const faltan = ["nueva", "estado", "nuevo_versus", "estado_versus"]
+    const faltan = ["nueva", "estado", "nuevo_versus", "estado_versus", "ranking_registrar"]
       .filter((f) => typeof puente[f] !== "function");
     if (faltan.length) {
       throw new Error("El navegador cargó archivos de una versión anterior del juego. " +
@@ -200,7 +202,7 @@ function construirMenus() {
     const b = document.createElement("button");
     b.tabIndex = -1;
     b.innerHTML = `<kbd>${m.clave}</kbd>${m.nombre}`;
-    b.onclick = () => { audio.desbloquear(); empezar(m.clave); };
+    b.onclick = () => { audio.desbloquear(); pedirNombre(m.clave); };
     menu.appendChild(b);
 
     const p = document.createElement("button");
@@ -210,11 +212,15 @@ function construirMenus() {
     p.onclick = () => {
       audio.desbloquear();
       if (fase === "juego") ejecutar(m.clave);
-      else if (fase === "menu") empezar(m.clave);
+      else if (fase === "menu") pedirNombre(m.clave);
     };
     pestanas.appendChild(p);
   }
   $("boton-versus").onclick = () => { audio.desbloquear(); versus.configurar(); };
+  $("boton-ranking").onclick = mostrarRanking;
+  $("form-nombre").onsubmit = (e) => { e.preventDefault(); confirmarNombre(); };
+  $("boton-nombre-volver").onclick = mostrarMenu;
+  $("campo-nombre").maxLength = puente.largo_nombre();
   versus.construir();
   $("boton-reiniciar").onclick = () => empezar(claveInicial);
   $("boton-menu").onclick = mostrarMenu;
@@ -239,6 +245,7 @@ function construirMenus() {
 
 function mostrarMenu() {
   if (fase.startsWith("versus")) versus.salir();
+  $("campo-nombre").blur();
   fase = "menu";
   estado = null;
   pausado = false;
@@ -248,8 +255,101 @@ function mostrarMenu() {
   actualizarSonido();
 }
 
+// ====================================================================
+// Nombre del jugador y tabla de puntuaciones (solo modo 1 jugador).
+// La tabla se guarda en el navegador; la lógica es juego/ranking.py.
+// ====================================================================
+
+const CLAVE_RANKING = "tetris-reto2:ranking";
+const CLAVE_NOMBRE = "tetris-reto2:nombre";
+
+// El almacenamiento del navegador puede no estar disponible (modo privado
+// estricto, cookies bloqueadas): en ese caso el juego sigue, sin guardar.
+function leer(clave) {
+  try { return localStorage.getItem(clave) || ""; } catch (_) { return ""; }
+}
+function escribir(clave, valor) {
+  try { localStorage.setItem(clave, valor); return true; } catch (_) { return false; }
+}
+
+function pedirNombre(clave) {
+  claveInicial = clave;
+  fase = "nombre";
+  const motor = listaMotores.find((m) => m.clave === clave);
+  $("nombre-motor").textContent = motor ? motor.nombre : clave;
+  const campo = $("campo-nombre");
+  campo.value = leer(CLAVE_NOMBRE);
+  mostrarCapa("capa-nombre");
+  campo.focus();
+  campo.select();
+}
+
+function confirmarNombre() {
+  nombreJugador = puente.nombre_valido($("campo-nombre").value);
+  escribir(CLAVE_NOMBRE, nombreJugador);
+  $("campo-nombre").blur();
+  empezar(claveInicial);
+}
+
+function mostrarRanking() {
+  fase = "ranking";
+  const filas = JSON.parse(puente.ranking_ordenar(leer(CLAVE_RANKING)));
+  dibujarTabla($("tabla-ranking"), filas, null, true);
+  mostrarCapa("capa-ranking");
+}
+
+function registrarResultado() {
+  const hoy = new Date();
+  const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+  const r = JSON.parse(puente.ranking_registrar(leer(CLAVE_RANKING), nombreJugador, fecha));
+  const guardado = escribir(CLAVE_RANKING, r.tabla);
+  dibujarTabla($("fin-tabla"), JSON.parse(r.tabla), r.puesto, false);
+  $("fin-puesto").textContent = !guardado ? "No se pudo guardar: el navegador bloquea el almacenamiento."
+    : r.puesto ? `¡Puesto ${r.puesto} en la tabla!` : "Esta vez no entraste al top 10.";
+  $("fin-puesto").classList.toggle("destacado", !!r.puesto);
+}
+
+// Tabla con #, nombre, nivel y puntos. Los nombres se insertan como texto,
+// nunca como HTML, porque los escribe el jugador.
+function dibujarTabla(contenedor, filas, resaltar, conMotor) {
+  contenedor.replaceChildren();
+  if (!filas.length) {
+    const vacio = document.createElement("p");
+    vacio.className = "tabla-vacia";
+    vacio.textContent = "Todavía no hay partidas. ¡Sé el primero!";
+    contenedor.appendChild(vacio);
+    return;
+  }
+  const tabla = document.createElement("table");
+  tabla.innerHTML = '<thead><tr><th>#</th><th>Nombre</th><th title="Nivel alcanzado">Nv</th><th>Puntos</th></tr></thead>';
+  const cuerpo = document.createElement("tbody");
+  filas.forEach((f, i) => {
+    const tr = document.createElement("tr");
+    if (i + 1 === resaltar) tr.className = "resaltada";
+    const celdas = [String(i + 1), f.nombre, String(f.nivel), String(f.puntos)];
+    celdas.forEach((texto, j) => {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      if (j === 1) {
+        td.title = `${f.nombre} · ${f.motor} · ${f.fecha}`;
+        if (conMotor && f.motor) {
+          const sub = document.createElement("small");
+          sub.textContent = f.motor;
+          td.appendChild(sub);
+        }
+      }
+      tr.appendChild(td);
+    });
+    cuerpo.appendChild(tr);
+  });
+  tabla.appendChild(cuerpo);
+  contenedor.appendChild(tabla);
+}
+
 function empezar(clave) {
   claveInicial = clave;
+  resultadoGuardado = false;
+  $("nombre-jugador").textContent = nombreJugador;
   puente.nueva(clave);
   fase = "juego";
   pausado = false;
@@ -288,6 +388,11 @@ function refrescar() {
   if (estado.terminada) {
     audio.detenerMusica();
     $("titulo-fin").textContent = estado.ganada ? "¡GANASTE!" : "FIN DEL JUEGO";
+    $("fin-nombre").textContent = nombreJugador;
+    if (!resultadoGuardado) {
+      resultadoGuardado = true;      // una sola fila por partida
+      registrarResultado();
+    }
     $("fin-puntos").textContent = estado.puntos;
     $("fin-nivel").textContent = estado.nivel;
     mostrarCapa("capa-fin");
@@ -331,6 +436,16 @@ const ACCIONES = {
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const tecla = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (fase === "nombre") {
+    // Mientras se escribe el nombre, las teclas son para el campo de texto
+    // (Enter lo envía el formulario); solo Esc vuelve al menú.
+    if (tecla === "Escape") mostrarMenu();
+    return;
+  }
+  if (fase === "ranking") {
+    if (tecla === "Escape" || tecla === "l" || tecla === "q") mostrarMenu();
+    return;
+  }
   if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(tecla)) e.preventDefault();
   if (e.repeat && fase.startsWith("versus")) { e.preventDefault(); return; }
   if (fase === "carga") return;
@@ -345,8 +460,11 @@ document.addEventListener("keydown", (e) => {
   if (fase.startsWith("versus")) return versus.teclado(e, tecla);
 
   if (fase === "menu") {
-    if (listaMotores.some((m) => m.clave === tecla)) empezar(tecla);
-    else if (tecla === "v") versus.configurar();
+    if (listaMotores.some((m) => m.clave === tecla)) {
+      e.preventDefault();          // que el número no aparezca escrito en el campo de nombre
+      pedirNombre(tecla);
+    } else if (tecla === "v") versus.configurar();
+    else if (tecla === "l") mostrarRanking();
     return;
   }
 
