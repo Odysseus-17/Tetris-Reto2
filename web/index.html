@@ -52,10 +52,20 @@
           </form>
         </div>
 
+        <div id="capa-modo" class="capa">
+          <h2>¿Activar modo tablero hardcore?</h2>
+          <p class="explicacion">Aparecen <b>puntos muertos</b>: casillas grises que flotan en el tablero. Las piezas se apoyan en ellos y se quedan ahí. Hay 3 en los niveles 1 a 3, 4 en el nivel 4 y 5 en el 5, y cambian de lugar al perder una vida o subir de nivel.</p>
+          <div class="botones opciones-modo">
+            <button id="boton-modo-si" data-valor="si" tabindex="-1"><kbd>S</kbd>Sí, activar</button>
+            <button id="boton-modo-no" data-valor="no" tabindex="-1"><kbd>N</kbd>No, tablero normal</button>
+          </div>
+          <small>← → y Enter también sirven · Esc para volver</small>
+        </div>
+
         <div id="capa-ranking" class="capa">
           <h2>Puntuaciones</h2>
           <div id="tabla-ranking" class="tabla-ranking"></div>
-          <small id="nota-ranking">Se guarda en este navegador · L o Esc para volver</small>
+          <small id="nota-ranking">☠ = tablero hardcore · Se guarda en este navegador · L o Esc para volver</small>
         </div>
 
         <div id="capa-fin" class="capa">
@@ -121,6 +131,7 @@
           <div class="barra-vacia" id="barra-vacia"></div>
         </div>
         <p class="porcentaje" id="porcentaje">0%</p>
+        <p class="dato muertos" id="fila-muertos" hidden>☠ Tablero hardcore <b id="muertos">0 puntos muertos</b></p>
         <div class="cifras">
           <div><span>Total</span><b id="puntos">0</b></div>
           <div><span>Líneas</span><b id="lineas">0</b></div>

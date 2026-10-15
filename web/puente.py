@@ -27,9 +27,9 @@ def motores():
     return json.dumps([{"clave": c, "nombre": M.nombre} for c, M in MOTORES.items()])
 
 
-def nueva(clave):
+def nueva(clave, tablero_hardcore=False):
     global partida
-    partida = Partida(clave)
+    partida = Partida(clave, tablero_hardcore=bool(tablero_hardcore))
 
 
 def gravedad():
@@ -77,7 +77,7 @@ def ranking_registrar(texto, nombre, fecha):
     y el puesto obtenido (o null si no entró en la tabla)."""
     r = Ranking.desde_json(texto)
     p = partida
-    puesto = r.agregar(nombre, p.puntos, p.nivel, p.motor.nombre, fecha)
+    puesto = r.agregar(nombre, p.puntos, p.nivel, p.motor.nombre, fecha, p.tablero_hardcore)
     return json.dumps({"tabla": r.a_json(), "puesto": puesto})
 
 
@@ -156,6 +156,8 @@ def _estado(p):
         "intervalo": p.intervalo_caida,
         "zona": f"{p.filas_efectivas}x{p.tablero.ancho}",
         "hardcore": p.hardcore,
+        "tablero_hardcore": p.tablero_hardcore,
+        "muertos": p.muertos_en_tablero,
         "probabilidad_temblor": p.probabilidad_temblor,
         "ultimo_temblor": p.ultimo_temblor,
         "terminada": p.terminada,

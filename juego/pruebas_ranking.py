@@ -38,6 +38,13 @@ ok(len(r.filas) == RANKING_MAXIMO, f"guarda como máximo {RANKING_MAXIMO} partid
 ok(r.agregar("Bajo", 500, 1) is None and len(r.filas) == RANKING_MAXIMO, "un puntaje que no alcanza no entra")
 ok(r.agregar("Alto", 5000, 4) == 1 and r.filas[-1]["nombre"] == "J1", "uno que entra desplaza al último")
 
+print("Tablero hardcore")
+r2 = Ranking()
+r2.agregar("Eva", 900, 2, tablero_hardcore=True)
+ok(r2.filas[0]["tablero_hardcore"] is True, "guarda si la partida se jugó con puntos muertos")
+ok(Ranking([{"nombre": "Vieja", "puntos": 5, "nivel": 1}]).filas[0]["tablero_hardcore"] is False,
+   "las filas guardadas antes de este modo se leen como partidas normales")
+
 print("JSON y persistencia")
 copia = Ranking.desde_json(r.a_json())
 ok(copia.filas == r.filas, "ida y vuelta por JSON sin pérdidas")

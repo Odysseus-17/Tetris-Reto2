@@ -8,7 +8,7 @@ guarda depende de la interfaz, y ambas usan el mismo formato JSON:
 
 Cada fila es una partida terminada:
   {"nombre": "Alfonso", "puntos": 3400, "nivel": 3,
-   "motor": "PCG32", "fecha": "2026-10-15"}
+   "motor": "PCG32", "fecha": "2026-10-15", "tablero_hardcore": false}
 
 Orden: más puntos primero; si empatan, el que llegó a un nivel mayor; si
 también empatan, el que lo logró antes conserva el puesto.
@@ -42,6 +42,7 @@ class Ranking:
                     "nivel": int(f["nivel"]),
                     "motor": str(f.get("motor", "")),
                     "fecha": str(f.get("fecha", "")),
+                    "tablero_hardcore": bool(f.get("tablero_hardcore", False)),
                 })
             except (KeyError, TypeError, ValueError):
                 continue                      # fila dañada: se ignora
@@ -64,11 +65,12 @@ class Ranking:
 
     # ---------- Operaciones ----------
 
-    def agregar(self, nombre, puntos, nivel, motor="", fecha=""):
+    def agregar(self, nombre, puntos, nivel, motor="", fecha="", tablero_hardcore=False):
         """Registra una partida. Devuelve su puesto (1, 2, ...) o None si no
         alcanzó a entrar en la tabla."""
         fila = {"nombre": limpiar_nombre(nombre), "puntos": int(puntos),
-                "nivel": int(nivel), "motor": motor, "fecha": fecha}
+                "nivel": int(nivel), "motor": motor, "fecha": fecha,
+                "tablero_hardcore": bool(tablero_hardcore)}
         # Se inserta DESPUÉS de las filas con igual o mejor resultado:
         # en un empate, quien lo logró antes conserva su puesto.
         i = 0

@@ -12,6 +12,7 @@ const RAIZ = new URL("../", location.href).href;   // carpeta raíz del proyecto
 const COLORES = {
   I: "#2ee6f0", O: "#f5d63d", T: "#b45cf0", S: "#4fdc6b",
   Z: "#f0525b", J: "#3f7cf5", L: "#f59a3a",
+  X: "#6b7280",          // punto muerto (modo tablero hardcore)
 };
 const DURACION_AVISO = 1500;
 
@@ -19,9 +20,10 @@ const $ = (id) => document.getElementById(id);
 
 let puente = null;           // módulo web/puente.py
 let estado = null;           // último estado recibido de Python
-let fase = "carga";          // carga | menu | nombre | ranking | juego | versus-config | versus
+let fase = "carga";          // carga | menu | nombre | modo | ranking | juego | versus-config | versus
 let claveInicial = "3";
 let nombreJugador = "";      // quién juega la partida de 1 jugador
+let tableroHardcore = false; // puntos muertos activados para la partida
 let resultadoGuardado = false;
 let pausado = false;
 let ultimoPaso = 0;
@@ -221,6 +223,8 @@ function construirMenus() {
   $("form-nombre").onsubmit = (e) => { e.preventDefault(); confirmarNombre(); };
   $("boton-nombre-volver").onclick = mostrarMenu;
   $("campo-nombre").maxLength = puente.largo_nombre();
+  $("boton-modo-si").onclick = () => elegirModo(true);
+  $("boton-modo-no").onclick = () => elegirModo(false);
   versus.construir();
   $("boton-reiniciar").onclick = () => empezar(claveInicial);
   $("boton-menu").onclick = mostrarMenu;
@@ -288,6 +292,24 @@ function confirmarNombre() {
   nombreJugador = puente.nombre_valido($("campo-nombre").value);
   escribir(CLAVE_NOMBRE, nombreJugador);
   $("campo-nombre").blur();
+  preguntarModo();
+}
+
+// Después del nombre: ¿activar el modo tablero hardcore (puntos muertos)?
+function preguntarModo() {
+  fase = "modo";
+  marcarModo(tableroHardcore);
+  mostrarCapa("capa-modo");
+}
+
+function marcarModo(valor) {
+  tableroHardcore = valor;
+  $("boton-modo-si").classList.toggle("activo", valor);
+  $("boton-modo-no").classList.toggle("activo", !valor);
+}
+
+function elegirModo(valor) {
+  marcarModo(valor);
   empezar(claveInicial);
 }
 
@@ -329,9 +351,9 @@ function dibujarTabla(contenedor, filas, resaltar, conMotor) {
     const celdas = [String(i + 1), f.nombre, String(f.nivel), String(f.puntos)];
     celdas.forEach((texto, j) => {
       const td = document.createElement("td");
-      td.textContent = texto;
+      td.textContent = j === 1 && f.tablero_hardcore ? `☠ ${texto}` : texto;
       if (j === 1) {
-        td.title = `${f.nombre} · ${f.motor} · ${f.fecha}`;
+        td.title = `${f.nombre} · ${f.motor} · ${f.fecha}${f.tablero_hardcore ? " · tablero hardcore" : ""}`;
         if (conMotor && f.motor) {
           const sub = document.createElement("small");
           sub.textContent = f.motor;
@@ -350,7 +372,7 @@ function empezar(clave) {
   claveInicial = clave;
   resultadoGuardado = false;
   $("nombre-jugador").textContent = nombreJugador;
-  puente.nueva(clave);
+  puente.nueva(clave, tableroHardcore);   // la revancha (R) repite nombre y modo
   fase = "juego";
   pausado = false;
   audio.pausar(false);
@@ -442,6 +464,15 @@ document.addEventListener("keydown", (e) => {
     if (tecla === "Escape") mostrarMenu();
     return;
   }
+  if (fase === "modo") {
+    if (tecla === "s") elegirModo(true);
+    else if (tecla === "n") elegirModo(false);
+    else if (tecla === "ArrowLeft" || tecla === "ArrowRight") marcarModo(!tableroHardcore);
+    else if (tecla === "Enter" || tecla === " ") elegirModo(tableroHardcore);
+    else if (tecla === "Escape") pedirNombre(claveInicial);
+    e.preventDefault();
+    return;
+  }
   if (fase === "ranking") {
     if (tecla === "Escape" || tecla === "l" || tecla === "q") mostrarMenu();
     return;
@@ -527,6 +558,8 @@ function actualizarPanel() {
   $("lineas").textContent = e.lineas;
   $("velocidad").textContent = `×${e.velocidad.toFixed(2)}`;
   $("zona").textContent = e.zona;
+  $("fila-muertos").hidden = !e.tablero_hardcore;
+  $("muertos").textContent = `${e.muertos} ${e.muertos === 1 ? "punto muerto" : "puntos muertos"}`;
 
   $("boton-hardcore").classList.toggle("encendido", e.hardcore);
   $("estado-hardcore").textContent = e.hardcore ? `${e.probabilidad_temblor}%` : "apagado";
@@ -629,7 +662,18 @@ function dibujarTablero(canvas, est) {
 
   // Bloques fijos
   est.tablero.forEach((fila, f) => fila.forEach((tipo, c) => {
-    if (tipo) bloque(ctx, c * t, f * t, t, COLORES[tipo]);
+    if (!tipo) return;
+    bloque(ctx, c * t, f * t, t, COLORES[tipo]);
+    if (tipo === "X") {
+      // Marca de punto muerto: una X oscura sobre el bloque gris
+      const m = t * 0.3;
+      ctx.strokeStyle = "rgba(0, 0, 0, .45)";
+      ctx.lineWidth = Math.max(2, t / 10);
+      ctx.beginPath();
+      ctx.moveTo(c * t + m, f * t + m); ctx.lineTo(c * t + t - m, f * t + t - m);
+      ctx.moveTo(c * t + t - m, f * t + m); ctx.lineTo(c * t + m, f * t + t - m);
+      ctx.stroke();
+    }
   }));
 
   if (!est.terminada) {

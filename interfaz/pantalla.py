@@ -12,6 +12,7 @@ from juego.config import VIDAS_INICIALES, METAS_NIVEL, LARGO_NOMBRE
 from juego.partida import Partida
 from juego.ranking import cargar_archivo, guardar_archivo, limpiar_nombre
 from juego.piezas import FORMAS, ORDEN
+from juego.tablero import MUERTO
 from audio.reproductor import Audio
 
 FILAS_MIN, COLUMNAS_MIN = 24, 64
@@ -26,7 +27,7 @@ COLORES = {
     "S": curses.COLOR_GREEN, "Z": curses.COLOR_RED, "J": curses.COLOR_BLUE,
     "L": curses.COLOR_WHITE,
 }
-PAR_FANTASMA, PAR_LIMITE, PAR_VIDA = 20, 21, 22
+PAR_FANTASMA, PAR_LIMITE, PAR_VIDA, PAR_MUERTO = 20, 21, 22, 23
 PAR_BARRA_INICIO = 30    # pares 30.. para el degradado de la barra
 pares_barra = []
 
@@ -39,6 +40,9 @@ def iniciar_colores():
     curses.init_pair(PAR_FANTASMA, curses.COLOR_WHITE, -1)
     curses.init_pair(PAR_LIMITE, curses.COLOR_BLUE, -1)
     curses.init_pair(PAR_VIDA, curses.COLOR_RED, -1)
+    # Punto muerto: gris (color 244 con 256 colores; si no, blanco atenuado)
+    gris = 244 if curses.COLORS >= 256 else curses.COLOR_WHITE
+    curses.init_pair(PAR_MUERTO, curses.COLOR_BLACK, gris)
 
     # Degradado azul -> rojo. Con 256 colores se usa el cubo 6x6x6 de xterm:
     # índice = 16 + 36·rojo + 6·verde + azul, con cada componente de 0 a 5.
@@ -75,7 +79,9 @@ def dibujar_tablero(win, partida, y0, x0):
         escribir(win, y0 + r, x0 + 1 + t.ancho * 2, "│")
         for c in range(t.ancho):
             tipo = t.celdas[r][c]
-            if tipo:
+            if tipo == MUERTO:
+                escribir(win, y0 + r, x0 + 1 + c * 2, "><", curses.color_pair(PAR_MUERTO))
+            elif tipo:
                 escribir(win, y0 + r, x0 + 1 + c * 2, "  ", par(tipo))
             elif r == limite - 1:
                 # Línea limitadora azul: justo encima de la primera fila jugable
@@ -157,6 +163,10 @@ def dibujar_panel(win, partida, y0, x0, pausado, audio):
 
     # --- Siguiente pieza ---
     escribir(win, y0 + 15, x0, "Siguiente:", negrita)
+    if partida.tablero_hardcore:
+        n = partida.muertos_en_tablero
+        escribir(win, y0 + 17, x0 + 20, "><", curses.color_pair(PAR_MUERTO))
+        escribir(win, y0 + 17, x0 + 23, f"{n} punto{'s' if n != 1 else ''} muerto{'s' if n != 1 else ''}")
     dibujar_mini_pieza(win, partida.siguiente_tipo, y0 + 15, x0 + 12)
 
     # --- Sonido ---
@@ -201,10 +211,12 @@ def dibujar_tabla(win, filas, y0, x0, resaltar=None):
         return
     escribir(win, y0 + 2, x0, f" #  {'Nombre':<{LARGO_NOMBRE}}  Nv  Puntos", curses.A_DIM)
     for i, f in enumerate(filas, start=1):
-        texto = f"{i:>2}  {f['nombre']:<{LARGO_NOMBRE}}  {f['nivel']:>2}  {f['puntos']:>6}"
+        marca = "*" if f.get("tablero_hardcore") else " "
+        texto = f"{i:>2} {marca}{f['nombre']:<{LARGO_NOMBRE}}  {f['nivel']:>2}  {f['puntos']:>6}"
         attr = curses.A_REVERSE | curses.A_BOLD if i == resaltar else 0
         escribir(win, y0 + 2 + i, x0, texto, attr)
-    escribir(win, y0 + 4 + len(filas), x0, f"Guardada en datos/{RUTA_RANKING.name}", curses.A_DIM)
+    escribir(win, y0 + 4 + len(filas), x0, "* tablero hardcore", curses.A_DIM)
+    escribir(win, y0 + 5 + len(filas), x0, f"Guardada en datos/{RUTA_RANKING.name}", curses.A_DIM)
 
 
 def registrar_resultado(partida, nombre):
@@ -213,7 +225,8 @@ def registrar_resultado(partida, nombre):
     ranking = cargar_archivo(RUTA_RANKING)
     resultado["puesto"] = ranking.agregar(nombre, partida.puntos, partida.nivel,
                                           partida.motor.nombre,
-                                          datetime.date.today().isoformat())
+                                          datetime.date.today().isoformat(),
+                                          partida.tablero_hardcore)
     resultado["filas"] = ranking.filas
     try:
         guardar_archivo(RUTA_RANKING, ranking)
@@ -293,9 +306,39 @@ def pedir_nombre(win, clave_motor, anterior):
             texto += tecla
 
 
-def jugar(win, clave_motor, audio, nombre):
+def preguntar_tablero(win, nombre, anterior):
+    """Después del nombre: ¿activar el modo tablero hardcore (puntos muertos)?
+    Devuelve True o False, o None si el jugador presiona Esc."""
+    elegido = anterior
+    while True:
+        win.erase()
+        escribir(win, 2, 4, "T E T R I S   —   Reto 2", curses.A_BOLD)
+        escribir(win, 4, 4, f"Jugador: {nombre}")
+        escribir(win, 6, 4, "¿Activar modo tablero hardcore?", curses.A_BOLD)
+        escribir(win, 8, 4, "Aparecen puntos muertos: casillas grises que flotan en el")
+        escribir(win, 9, 4, "tablero. Las piezas se apoyan en ellos y se quedan ahí.")
+        escribir(win, 10, 4, "3 en los niveles 1-3, 4 en el nivel 4 y 5 en el nivel 5;")
+        escribir(win, 11, 4, "cambian de lugar al perder una vida o subir de nivel.")
+        escribir(win, 13, 6, " [s] Sí, activar ", curses.A_REVERSE if elegido else 0)
+        escribir(win, 14, 6, " [n] No, tablero normal ", 0 if elegido else curses.A_REVERSE)
+        escribir(win, 16, 4, "s / n, o flechas y Enter · Esc para volver", curses.A_DIM)
+        win.refresh()
+        tecla = win.getch()
+        if tecla in (ord("s"), ord("S")):
+            return True
+        if tecla in (ord("n"), ord("N")):
+            return False
+        if tecla in (curses.KEY_UP, curses.KEY_DOWN):
+            elegido = not elegido
+        elif tecla in (10, 13, curses.KEY_ENTER):
+            return elegido
+        elif tecla == 27:
+            return None
+
+
+def jugar(win, clave_motor, audio, nombre, tablero_hardcore=False):
     """Devuelve True si el jugador pide reiniciar, False si sale."""
-    partida = Partida(clave_motor)
+    partida = Partida(clave_motor, tablero_hardcore=tablero_hardcore)
     resultado = None                    # se llena una sola vez, al terminar
     ultimo_paso = time.monotonic()
     pausado = False
@@ -387,17 +430,22 @@ def principal(win):
     win.keypad(True)
     win.timeout(TICK_MS)   # getch() espera como máximo 30 ms: el juego no se congela
     audio = Audio()
-    nombre = ""
+    nombre, tablero_hardcore = "", False
     try:
         while True:
             clave = menu(win)
             if clave is None:
                 return
-            nombre = pedir_nombre(win, clave, nombre)
-            if nombre is None:          # Esc: volver al menú
-                nombre = ""
+            nuevo = pedir_nombre(win, clave, nombre)
+            if nuevo is None:           # Esc: volver al menú
                 continue
-            while jugar(win, clave, audio, nombre):   # la revancha (r) usa el mismo nombre
+            nombre = nuevo
+            modo = preguntar_tablero(win, nombre, tablero_hardcore)
+            if modo is None:            # Esc: volver al menú
+                continue
+            tablero_hardcore = modo
+            # La revancha (r) repite el nombre y el modo
+            while jugar(win, clave, audio, nombre, tablero_hardcore):
                 pass
             audio.detener_musica()
     finally:

@@ -26,3 +26,9 @@ META_VERSUS = 1000
 # Tabla de puntuaciones (solo modo 1 jugador)
 RANKING_MAXIMO = 10         # cuántas partidas guarda la tabla
 LARGO_NOMBRE = 16           # caracteres máximos del nombre del jugador
+
+# Modo tablero hardcore (se elige al empezar, solo 1 jugador): "puntos muertos",
+# casillas grises que flotan en el tablero y se comportan como un bloque más.
+PUNTOS_MUERTOS = (3, 3, 3, 4, 5)   # cantidad por nivel
+FILAS_SIN_MUERTOS = 5              # las primeras filas quedan libres para que
+                                   # ninguna pieza aparezca encima de uno

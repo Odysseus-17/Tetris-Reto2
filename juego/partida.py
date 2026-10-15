@@ -5,15 +5,16 @@ números aleatorios decide:
   2. En qué columna aparece     -> motor.rango(ancho_tablero - ancho_pieza + 1)
   3. Si la pieza tiembla         -> motor.rango(100) < probabilidad   (modo hardcore)
      y hacia dónde               -> motor.rango(2)
+  4. Dónde quedan los puntos muertos -> motor.rango(casillas_posibles)  (tablero hardcore)
 
 También maneja niveles, vidas, la línea limitadora y la velocidad.
 """
 from motores import MOTORES, semilla_por_reloj
 from .config import (PUNTOS_POR_LINEA, METAS_NIVEL, VIDAS_INICIALES,
                      FILAS_POR_VIDA, INTERVALO_BASE, INCREMENTO_VELOCIDAD,
-                     PROBABILIDAD_TEMBLOR)
+                     PROBABILIDAD_TEMBLOR, PUNTOS_MUERTOS, FILAS_SIN_MUERTOS)
 from .piezas import Pieza, ORDEN, rotar
-from .tablero import Tablero
+from .tablero import Tablero, MUERTO
 
 # Desplazamientos que se intentan si una rotación choca con una pared o pieza
 DESPLAZAMIENTOS_ROTACION = (0, -1, 1, -2, 2)
@@ -21,7 +22,7 @@ DESPLAZAMIENTOS_ROTACION = (0, -1, 1, -2, 2)
 
 class Partida:
     def __init__(self, clave_motor="3", semilla=None, ancho=10, alto=20,
-                 metas=METAS_NIVEL):
+                 metas=METAS_NIVEL, tablero_hardcore=False):
         # Puntos para pasar cada nivel. El modo 2 jugadores usa una sola meta.
         self.metas = tuple(metas)
         self.tablero = Tablero(ancho, alto)
@@ -40,6 +41,10 @@ class Partida:
         self.sonidos = []          # efectos pendientes; la interfaz los reproduce y vacía
         self.ultimo_sorteo = {}    # para mostrar en el panel
         self.cambiar_motor(clave_motor, semilla)
+
+        self.tablero_hardcore = tablero_hardcore
+        self.muertos = []          # posiciones (fila, columna) de la última generación
+        self._generar_muertos()
 
         self.siguiente_tipo = self._sortear_tipo()
         self.actual = None
@@ -121,6 +126,40 @@ class Partida:
             self._temblar()
         self.bajar()
 
+    # ---------- Tablero hardcore: puntos muertos ----------
+
+    @property
+    def cantidad_muertos(self):
+        return PUNTOS_MUERTOS[min(self.nivel, len(PUNTOS_MUERTOS)) - 1]
+
+    @property
+    def muertos_en_tablero(self):
+        """Cuántos quedan: los que estén en una fila completada desaparecen."""
+        return sum(fila.count(MUERTO) for fila in self.tablero.celdas)
+
+    def _generar_muertos(self):
+        """Coloca los puntos muertos del nivel en casillas sorteadas por el motor.
+        Se llama al empezar, al subir de nivel y al perder una vida, siempre
+        sobre un tablero recién limpiado."""
+        if not self.tablero_hardcore:
+            return
+        anteriores = set(self.muertos)
+        # Ni en las primeras filas (para que ninguna pieza aparezca encima)
+        # ni por encima de la línea azul (sería perder una vida sin jugar).
+        desde = max(FILAS_SIN_MUERTOS, self.fila_limite)
+        posibles = [(f, c) for f in range(desde, self.tablero.alto)
+                    for c in range(self.tablero.ancho)]
+        # "Un lugar diferente": se evitan las casillas de la generación anterior
+        nuevas = [p for p in posibles if p not in anteriores]
+        if len(nuevas) >= self.cantidad_muertos:
+            posibles = nuevas
+        self.muertos = []
+        for _ in range(self.cantidad_muertos):
+            # Sorteo sin repetición: se elige un índice y se saca de la lista
+            fila, columna = posibles.pop(self.motor.rango(len(posibles)))
+            self.tablero.celdas[fila][columna] = MUERTO
+            self.muertos.append((fila, columna))
+
     # ---------- Ciclo de vida de las piezas ----------
 
     def _aparecer(self):
@@ -147,7 +186,7 @@ class Partida:
             self._aparecer()
 
     def _sobrepasa_limite(self):
-        return any(any(celda is not None for celda in self.tablero.celdas[r])
+        return any(any(celda not in (None, MUERTO) for celda in self.tablero.celdas[r])
                    for r in range(self.fila_limite))
 
     # ---------- Puntos, niveles y vidas ----------
@@ -168,6 +207,7 @@ class Partida:
                 self.puntos_nivel = 0   # cada nivel empieza de cero; el sobrante se descarta
                 self.tablero = Tablero(self.tablero.ancho, self.tablero.alto)  # tablero limpio
                 self.nivel += 1
+                self._generar_muertos()             # nuevos puntos muertos para el nivel
                 self.evento = "nivel"
                 self.sonidos.append("nivel")
 
@@ -180,6 +220,7 @@ class Partida:
         # La línea bajó: se limpia el tablero para empezar en la zona más pequeña.
         # Los puntos y el nivel se conservan.
         self.tablero = Tablero(self.tablero.ancho, self.tablero.alto)
+        self._generar_muertos()                     # los puntos muertos cambian de lugar
         self.evento = "vida"
         self.sonidos.append("vida")
         self._aparecer()

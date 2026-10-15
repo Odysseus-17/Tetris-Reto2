@@ -45,6 +45,7 @@ Tiene **dos interfaces que comparten exactamente la misma lógica en Python**:
 - [Motores de números aleatorios](#motores-de-números-aleatorios)
 - [Qué controla el azar en el juego](#qué-controla-el-azar-en-el-juego)
 - [Reglas del juego](#reglas-del-juego)
+- [Modo tablero hardcore](#modo-tablero-hardcore)
 - [Tabla de puntuaciones](#tabla-de-puntuaciones)
 - [Sonido procedural](#sonido-procedural)
 - [Pruebas](#pruebas)
@@ -306,6 +307,24 @@ Se pierde una vida cuando una pieza queda fija con algún bloque por encima de l
 
 ---
 
+## Modo tablero hardcore
+
+Opcional y solo en el modo de 1 jugador. Después de escribir el nombre, el juego pregunta **¿Activar modo tablero hardcore?** (`S` / `N`). Al activarlo aparecen **puntos muertos**: casillas grises que flotan en el tablero.
+
+| Nivel | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| Puntos muertos | 3 | 3 | 3 | 4 | 5 |
+
+- **Las piezas se apoyan en ellos y se quedan ahí**, flotando. Apoyarse en un punto muerto no cuesta una vida.
+- **Su ubicación la decide el motor de números aleatorios** activo: se sortea una casilla con `motor.rango(casillas_posibles)` por cada punto muerto, sin repetir. Es otro uso visible de los generadores: con la misma semilla y el mismo motor, aparecen en las mismas casillas.
+- **Nunca aparecen en las primeras 5 filas**, para que ninguna pieza nueva caiga encima de uno, **ni por encima de la línea azul**, porque eso sería perder una vida sin jugar.
+- **Cambian de lugar al perder una vida y al subir de nivel**: el tablero se limpia y se sortean de nuevo, evitando las casillas que tenían antes.
+- **Cuentan como casilla llena para completar una fila.** Si no contaran, una fila con un punto muerto nunca podría completarse. Al completarla, el punto muerto desaparece con ella; si se limpian filas debajo de él, baja junto con su fila, como cualquier bloque.
+
+La tabla de puntuaciones marca las partidas jugadas en este modo (☠ en la web, `*` en la terminal), porque no son comparables con las normales. La revancha con `R` repite el nombre y el modo.
+
+Los valores están en `juego/config.py` (`PUNTOS_MUERTOS` y `FILAS_SIN_MUERTOS`) y la lógica en `juego/partida.py`. Para el tablero, un punto muerto es simplemente una casilla ocupada (`MUERTO = "X"` en `juego/tablero.py`), así que las colisiones y la limpieza de filas no necesitaron cambios.
+
 ## Tabla de puntuaciones
 
 Solo en el modo de 1 jugador; el modo 2 jugadores no la usa.
@@ -353,6 +372,7 @@ python3 pruebas_motores.py   # los cuatro generadores
 python3 juego/pruebas_juego.py   # lógica del Tetris, niveles, vidas, hardcore
 python3 juego/pruebas_versus.py  # modo 2 jugadores
 python3 juego/pruebas_ranking.py # tabla de puntuaciones
+python3 juego/pruebas_muertos.py # modo tablero hardcore
 python3 pruebas_audio.py     # sintetizador, música y mezclador (no necesita parlantes)
 ```
 
@@ -361,6 +381,7 @@ En Windows, reemplazar `python3` por `py`.
 | Archivo | Qué verifica |
 |---|---|
 | `pruebas_motores.py` | PCG32, Xoshiro256** y SplitMix64 contra sus referencias; teorema de Hull-Dobell; degeneración del cuadrado medio; defecto de los bits bajos del LCG; distribución de 70 000 piezas por motor con prueba de **chi-cuadrado** |
+| `juego/pruebas_muertos.py` | Cantidad por nivel, filas permitidas, que los decida el motor, cambio de lugar al perder una vida y al subir de nivel, piezas apoyadas, filas completadas con puntos muertos |
 | `juego/pruebas_ranking.py` | Limpieza de nombres, orden y desempates, límite de 10 partidas, archivo vacío o dañado, persistencia en disco |
 | `juego/pruebas_versus.py` | Partidas independientes, motor propio por jugador, victoria por meta y por vidas, que la torre del ganador no se borre |
 | `juego/pruebas_juego.py` | Rotación, colisiones, limpieza de líneas, aparición controlada por el motor, cambio de motor, puntaje, niveles, vidas, línea limitadora, velocidad y frecuencia del temblor |
@@ -393,6 +414,7 @@ Tetris-Reto2/
 │   ├── partida.py
 │   ├── versus.py            #   modo 2 jugadores: decide quién gana
 │   ├── ranking.py           #   tabla de puntuaciones (1 jugador)
+│   ├── pruebas_muertos.py
 │   ├── pruebas_juego.py
 │   └── pruebas_versus.py
 ├── interfaz/

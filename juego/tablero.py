@@ -1,7 +1,13 @@
 """
 El tablero es una matriz de alto x ancho. Cada celda guarda None (vacía)
 o la letra de la pieza que la ocupa (para saber de qué color pintarla).
+
+Los puntos muertos del modo tablero hardcore se guardan como MUERTO ("X"):
+para el tablero son un bloque más, así que las piezas se apoyan en ellos,
+cuentan para completar una fila y desaparecen con ella.
 """
+
+MUERTO = "X"
 
 
 class Tablero:
